@@ -1,0 +1,30 @@
+name: 🐛 Błąd
+description: Coś nie działa tak, jak powinno.
+labels: ["type: bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Co się dzieje?
+      description: Opisz błąd i to, czego się spodziewałeś.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Jak to powtórzyć?
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Środowisko
+      description: System, przeglądarka lub wersja aplikacji.
+  - type: dropdown
+    id: prio
+    attributes:
+      label: Priorytet
+      options: ["Niski", "Średni", "Wysoki", "Krytyczny"]
+    validations:
+      required: true

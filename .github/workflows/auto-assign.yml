@@ -1,0 +1,20 @@
+name: Auto-assign issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  assign:
+    if: ${{ github.event.issue.assignees[0] == null }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Assign the triage owner
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ vars.TRIAGE_ASSIGNEE || 'matiqueue' }}
+        run: gh issue edit ${{ github.event.issue.number }} --repo ${{ github.repository }} --add-assignee "$ASSIGNEE"

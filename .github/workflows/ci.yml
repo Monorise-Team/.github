@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Scripts parse
+        run: for f in scripts/*.mjs; do node --check "$f"; done
+      - name: Assets match their generator
+        run: |
+          node scripts/generate-assets.mjs
+          git diff --exit-code -- profile/assets || { echo "::error::profile/assets differ from scripts/generate-assets.mjs; run it and commit"; exit 1; }
+      - name: SVGs are valid XML
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          bad = 0
+          for f in glob.glob("profile/assets/*.svg"):
+              try: ET.parse(f)
+              except ET.ParseError as e: print(f"::error file={f}::{e}"); bad += 1
+          sys.exit(bad)
+          PY
+      - name: README images exist
+        run: |
+          grep -o 'src="\./assets/[^"]*"' profile/README.md | sed 's/src="\.\///;s/"$//' | while read -r f; do
+            test -f "profile/$f" || { echo "::error::missing profile/$f"; exit 1; }
+          done
