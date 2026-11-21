@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 160" width="100%" height="160" fill="none">
+  <defs>
+    <linearGradient id="ln" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#818cf8"/><stop offset=".5" stop-color="#f472b6"/><stop offset="1" stop-color="#fbbf24"/></linearGradient>
+  </defs>
+  <style>
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif}.mono{font-family:ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace}
+    @keyframes dash{to{stroke-dashoffset:-48}}
+    @keyframes hl{0%,100%{opacity:0}10%,25%{opacity:1}35%{opacity:0}}
+    .dash{stroke-dasharray:6 10;animation:dash 1.4s linear infinite}
+    .hl{opacity:0;animation:hl 4s ease-in-out infinite}
+  </style>
+  <path d="M30 82 H870" stroke="url(#ln)" stroke-width="2" class="dash" opacity=".7"/>
+  <g transform="translate(30,34)">
+      <rect width="195" height="96" rx="14" fill="#0c0e1d" stroke="#232747"/>
+      <rect width="195" height="96" rx="14" stroke="#818cf8" class="hl" style="animation-delay:0s"/>
+      <text x="18" y="32" fill="#818cf8" class="mono" font-size="12" font-weight="800" letter-spacing=".12em">01</text>
+      <text x="18" y="60" fill="#f1f5f9" class="sans" font-size="19" font-weight="800">Analiza</text>
+      <text x="18" y="81" fill="#7c84a8" class="sans" font-size="12.5">cele, zakres, wycena</text>
+    </g>
+<g transform="translate(245,34)">
+      <rect width="195" height="96" rx="14" fill="#0c0e1d" stroke="#232747"/>
+      <rect width="195" height="96" rx="14" stroke="#c084fc" class="hl" style="animation-delay:1s"/>
+      <text x="18" y="32" fill="#c084fc" class="mono" font-size="12" font-weight="800" letter-spacing=".12em">02</text>
+      <text x="18" y="60" fill="#f1f5f9" class="sans" font-size="19" font-weight="800">Projekt</text>
+      <text x="18" y="81" fill="#7c84a8" class="sans" font-size="12.5">UX, UI, prototyp</text>
+    </g>
+<g transform="translate(460,34)">
+      <rect width="195" height="96" rx="14" fill="#0c0e1d" stroke="#232747"/>
+      <rect width="195" height="96" rx="14" stroke="#f472b6" class="hl" style="animation-delay:2s"/>
+      <text x="18" y="32" fill="#f472b6" class="mono" font-size="12" font-weight="800" letter-spacing=".12em">03</text>
+      <text x="18" y="60" fill="#f1f5f9" class="sans" font-size="19" font-weight="800">Kod</text>
+      <text x="18" y="81" fill="#7c84a8" class="sans" font-size="12.5">web, desktop, API</text>
+    </g>
+<g transform="translate(675,34)">
+      <rect width="195" height="96" rx="14" fill="#0c0e1d" stroke="#232747"/>
+      <rect width="195" height="96" rx="14" stroke="#fbbf24" class="hl" style="animation-delay:3s"/>
+      <text x="18" y="32" fill="#fbbf24" class="mono" font-size="12" font-weight="800" letter-spacing=".12em">04</text>
+      <text x="18" y="60" fill="#f1f5f9" class="sans" font-size="19" font-weight="800">Wdrożenie</text>
+      <text x="18" y="81" fill="#7c84a8" class="sans" font-size="12.5">wydania i opieka</text>
+    </g>
+</svg>

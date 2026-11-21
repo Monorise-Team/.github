@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 320" width="100%" height="320" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07080f"/><stop offset=".55" stop-color="#0d0f1f"/><stop offset="1" stop-color="#06070d"/>
+    </linearGradient>
+    <linearGradient id="border" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#818cf8" stop-opacity=".95"/><stop offset=".35" stop-color="#c084fc" stop-opacity=".45"/>
+      <stop offset=".7" stop-color="#f472b6" stop-opacity=".6"/><stop offset="1" stop-color="#fbbf24" stop-opacity=".95"/>
+    </linearGradient>
+    <linearGradient id="name" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/><stop offset=".3" stop-color="#c4b5fd"/>
+      <stop offset=".65" stop-color="#f0abfc"/><stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="sub" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#818cf8"/><stop offset=".5" stop-color="#c084fc"/><stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1d33" stop-opacity=".9"/><stop offset="1" stop-color="#0e1022" stop-opacity=".9"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#6366f1"/><stop offset=".55" stop-color="#c084fc"/><stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+    <radialGradient id="sun" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".6" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="a1" cx=".18" cy=".35" r=".55"><stop offset="0" stop-color="#6366f1" stop-opacity=".32"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></radialGradient>
+    <radialGradient id="a2" cx=".82" cy=".28" r=".55"><stop offset="0" stop-color="#c026d3" stop-opacity=".24"/><stop offset="1" stop-color="#c026d3" stop-opacity="0"/></radialGradient>
+    <radialGradient id="a3" cx=".5" cy="1" r=".5"><stop offset="0" stop-color="#f59e0b" stop-opacity=".2"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></radialGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#4b5275" fill-opacity=".3"/></pattern>
+    <clipPath id="card"><rect x="2" y="2" width="996" height="316" rx="20"/></clipPath>
+  </defs>
+  <style>
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif}.mono{font-family:ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace}
+    @keyframes breathe1{0%,100%{opacity:.6;transform:translate(0,0)}50%{opacity:1;transform:translate(24px,-8px)}}
+    @keyframes breathe2{0%,100%{opacity:1;transform:translate(0,0)}50%{opacity:.55;transform:translate(-26px,10px)}}
+    @keyframes rise{0%,100%{transform:translateY(6px)}50%{transform:translateY(-6px)}}
+    @keyframes glow{0%,100%{opacity:.55}50%{opacity:1}}
+    @keyframes ping{0%{r:4px;opacity:.9}100%{r:13px;opacity:0}}
+    @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+    @keyframes type{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+    @keyframes shimmer{0%{transform:translateX(-300px)}100%{transform:translateX(1300px)}}
+    .a1{animation:breathe1 9s ease-in-out infinite}
+    .a2{animation:breathe2 11s ease-in-out infinite}
+    .sun{animation:rise 5s ease-in-out infinite}
+    .halo{animation:glow 5s ease-in-out infinite}
+    .ping{animation:ping 2s ease-out infinite}
+    .cursor{animation:blink 1s step-end infinite}
+    .line{opacity:0;animation:type .45s ease-out forwards}
+    .shine{animation:shimmer 7s ease-in-out infinite}
+  </style>
+
+  <g clip-path="url(#card)">
+    <rect width="1000" height="320" fill="url(#bg)"/>
+    <rect width="1000" height="320" fill="url(#dots)"/>
+    <rect width="1000" height="320" fill="url(#a1)" class="a1"/>
+    <rect width="1000" height="320" fill="url(#a2)" class="a2"/>
+    <rect width="1000" height="320" fill="url(#a3)"/>
+    <rect x="0" y="0" width="160" height="320" fill="#ffffff" fill-opacity=".025" transform="skewX(-20)" class="shine"/>
+  </g>
+  <rect x="2" y="2" width="996" height="316" rx="20" stroke="url(#border)" stroke-width="1.5"/>
+
+  <!-- window bar -->
+  <path d="M2 44 H998" stroke="#1c1f36"/>
+  <circle cx="28" cy="23" r="6" fill="#ff5f57"/><circle cx="48" cy="23" r="6" fill="#febc2e"/><circle cx="68" cy="23" r="6" fill="#28c840"/>
+  <g transform="translate(400,11)">
+    <rect width="200" height="24" rx="12" fill="#0a0b16" stroke="#1f2340"/>
+    <path d="M16 10.5v-2a3 3 0 0 1 6 0v2" stroke="#64748b" stroke-width="1.4"/><rect x="14.5" y="10.5" width="9" height="6.5" rx="1.5" fill="#64748b"/>
+    <text x="106" y="16.5" fill="#94a3b8" text-anchor="middle" class="mono" font-size="11.5" letter-spacing=".04em">monorise.studio</text>
+  </g>
+  <g transform="translate(790,11)">
+    <rect width="186" height="24" rx="12" fill="#0a0b16" stroke="#1f2340"/>
+    <circle cx="16" cy="12" r="4" fill="#34d399"/><circle cx="16" cy="12" r="4" stroke="#34d399" class="ping"/>
+    <text x="28" y="16.5" fill="#cbd5e1" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">BUDUJEMY: AVEN</text>
+  </g>
+
+  <!-- mark: a sunrise over an M-shaped ridge -->
+  <g transform="translate(52,92)">
+    <rect width="128" height="128" rx="30" fill="#0c0e1d" stroke="url(#mark)" stroke-width="1.6"/>
+    <circle cx="64" cy="58" r="34" fill="url(#sun)" opacity=".35" class="halo"/>
+    <g class="sun"><circle cx="64" cy="56" r="13" fill="url(#sun)"/></g>
+    <rect x="18" y="74" width="92" height="40" fill="#0c0e1d"/>
+    <path d="M22 100 V52 L64 84 L106 52 V100" stroke="url(#mark)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M30 108 H98" stroke="#2e3350" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- copy -->
+  <g transform="translate(212,86)">
+    <text x="0" y="16" fill="url(#sub)" class="mono" font-size="12.5" font-weight="700" letter-spacing=".22em">SOFTWARE HOUSE</text>
+    <text x="-3" y="80" fill="url(#name)" class="sans" font-size="66" font-weight="900" letter-spacing="-0.035em">Monorise</text>
+    <text x="0" y="116" fill="#f1f5f9" class="sans" font-size="19" font-weight="600">Web i desktop, od pomysłu do wdrożenia.</text>
+    <text x="0" y="141" fill="#8b93b5" class="sans" font-size="14.5">Szybkie, prywatne i dopracowane w każdym pikselu.</text>
+    <g transform="translate(0,160)"><g transform="translate(0,0)">
+      <rect width="56.8" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
+      <circle cx="16" cy="16" r="3.5" fill="#22d3ee"/>
+      <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">WEB</text>
+    </g>
+<g transform="translate(66.8,0)">
+      <rect width="87.19999999999999" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
+      <circle cx="16" cy="16" r="3.5" fill="#a78bfa"/>
+      <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">DESKTOP</text>
+    </g>
+<g transform="translate(164,0)">
+      <rect width="94.8" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
+      <circle cx="16" cy="16" r="3.5" fill="#f472b6"/>
+      <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">PRODUKTY</text>
+    </g>
+<g transform="translate(268.8,0)">
+      <rect width="110" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
+      <circle cx="16" cy="16" r="3.5" fill="#fbbf24"/>
+      <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">OLKUSZ, PL</text>
+    </g></g>
+  </g>
+
+  <!-- terminal -->
+  <g transform="translate(726,70)">
+    <rect width="250" height="200" rx="14" fill="#0a0b16" fill-opacity=".88" stroke="#22264a"/>
+    <path d="M0 36 H250" stroke="#1a1d36"/>
+    <circle cx="18" cy="18" r="4" fill="#2e3350"/><circle cx="32" cy="18" r="4" fill="#2e3350"/><circle cx="46" cy="18" r="4" fill="#2e3350"/>
+    <text x="232" y="22" fill="#4b5275" text-anchor="end" class="mono" font-size="10.5">~/monorise</text>
+    <g>
+        <text x="20" y="70" fill="#e2e8f0" class="mono" font-size="12.5" font-weight="700">$</text>
+        <text x="40" y="70" fill="#f8fafc" class="mono" font-size="12.5">monorise new project</text>
+      </g>
+<g>
+        <text x="20" y="96" fill="#34d399" class="mono" font-size="12.5" font-weight="700">✓</text>
+        <text x="40" y="96" fill="#94a3b8" class="mono" font-size="12.5">analiza i zakres</text>
+      </g>
+<g>
+        <text x="20" y="122" fill="#34d399" class="mono" font-size="12.5" font-weight="700">✓</text>
+        <text x="40" y="122" fill="#94a3b8" class="mono" font-size="12.5">projekt UI/UX</text>
+      </g>
+<g>
+        <text x="20" y="148" fill="#34d399" class="mono" font-size="12.5" font-weight="700">✓</text>
+        <text x="40" y="148" fill="#94a3b8" class="mono" font-size="12.5">kod + testy</text>
+      </g>
+<g>
+        <text x="20" y="174" fill="#fbbf24" class="mono" font-size="12.5" font-weight="700">→</text>
+        <text x="40" y="174" fill="#94a3b8" class="mono" font-size="12.5">wdrożenie i opieka</text>
+      </g>
+    <rect x="20" y="189" width="8" height="14" rx="1.5" fill="#c084fc" class="cursor"/>
+  </g>
+</svg>
