@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=3000&pause=1000&color=C4B5FD&center=true&vCenter=true&width=820&height=40&lines=Software%20house%20z%20Polski%3A%20web%20i%20desktop%20%F0%9F%92%BB;Od%20pomys%C5%82u%2C%20przez%20projekt%2C%20do%20wdro%C5%BCenia%20%E2%9A%A1;Czysta%20architektura%20i%20dopracowany%20UI%20%E2%9C%A8;Budujemy%20Aven%20Business%2C%20poczt%C4%99%20dla%20firm%20%E2%9C%89%EF%B8%8F" alt="Monorise" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=3000&pause=1000&color=C4B5FD&center=true&vCenter=true&width=820&height=40&lines=Software%20house%20z%20Polski%3A%20web%20i%20desktop%20%F0%9F%92%BB;Od%20pomys%C5%82u%2C%20przez%20projekt%2C%20do%20wdro%C5%BCenia%20%E2%9A%A1;Czysta%20architektura%20i%20dopracowany%20UI%20%E2%9C%A8;Polski%20zesp%C3%B3%C5%82%2C%20jeden%20partner%20technologiczny%20%F0%9F%A4%9D" alt="Monorise" />
 </p>
 
 <a href="https://monorise.studio" target="_blank">
@@ -12,13 +12,15 @@
 
 <br/>
 
-### 🚀 Nasz produkt
+### 📊 Aktywność zespołu
 
 <div align="center">
-  <a href="https://get-aven.com" target="_blank">
-    <img src="./assets/aven.svg" width="100%" alt="Aven Business: klient poczty dla firm, w przygotowaniu" />
-  </a>
+  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/stats/stats.svg" width="100%" alt="Aktywność zespołu Monorise w ostatnich 12 miesiącach" />
 </div>
+
+<p align="center">
+  <sub>Liczone codziennie z aktywności całego zespołu, w repozytoriach publicznych i prywatnych.</sub>
+</p>
 
 ### 🧭 Jak pracujemy
 
@@ -57,7 +59,7 @@
 
 > [!NOTE]
 > **Dlaczego publicznych repozytoriów jest tu niewiele?**
-> Większość naszej pracy to projekty klientów i własne produkty w przygotowaniu, więc ich kod zostaje prywatny. 🔒 Chętnie pokażemy przykłady realizacji w rozmowie.
+> Większość naszej pracy to projekty dla klientów, więc ich kod zostaje prywatny, a statystyki powyżej obejmują też tę pracę. 🔒 Chętnie pokażemy przykłady realizacji w rozmowie.
 
 ### 🤝 Porozmawiajmy
 
@@ -76,7 +78,6 @@
 <p align="center">
   <a href="https://monorise.studio" target="_blank"><img src="./assets/btn-website.svg" height="42" alt="monorise.studio" /></a>&nbsp;&nbsp;
   <a href="mailto:hello@monorise.studio"><img src="./assets/btn-email.svg" height="42" alt="Napisz do nas" /></a>&nbsp;&nbsp;
-  <a href="https://get-aven.com" target="_blank"><img src="./assets/btn-aven.svg" height="42" alt="get-aven.com" /></a>&nbsp;&nbsp;
   <a href="https://github.com/orgs/Monorise-Team/people" target="_blank"><img src="./assets/btn-github.svg" height="42" alt="Zespół" /></a>
 </p>
 

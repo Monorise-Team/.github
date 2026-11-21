@@ -14,7 +14,7 @@ const fonts = `.sans{font-family:${SANS}}.mono{font-family:${MONO}}`;
 const chips = [
   ["WEB", "#22d3ee"],
   ["DESKTOP", "#a78bfa"],
-  ["PRODUKTY", "#f472b6"],
+  ["API", "#f472b6"],
   ["OLKUSZ, PL", "#fbbf24"],
 ];
 let cx = 0;
@@ -123,7 +123,7 @@ write(
   <g transform="translate(790,11)">
     <rect width="186" height="24" rx="12" fill="#0a0b16" stroke="#1f2340"/>
     <circle cx="16" cy="12" r="4" fill="#34d399"/><circle cx="16" cy="12" r="4" stroke="#34d399" class="ping"/>
-    <text x="28" y="16.5" fill="#cbd5e1" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">BUDUJEMY: AVEN</text>
+    <text x="28" y="16.5" fill="#cbd5e1" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">MONORISE TEAM · PL</text>
   </g>
 
   <!-- mark: a sunrise over an M-shaped ridge -->
@@ -188,84 +188,6 @@ write(
 </svg>`,
 );
 
-// ---------- Aven Business product card ----------
-const keys = ["J", "K", "E", "R", "⌘K"];
-const keySvg = keys
-  .map((k, i) => {
-    const w = k.length > 1 ? 58 : 44;
-    const x = [0, 52, 104, 156, 208][i];
-    return `<g transform="translate(${x},0)">
-      <rect width="${w}" height="44" rx="10" fill="#111326" stroke="#2a2e52"/>
-      <rect width="${w}" height="44" rx="10" fill="#a78bfa" fill-opacity=".28" stroke="#c4b5fd" class="k" style="animation-delay:${i * 0.6}s"/>
-      <text x="${w / 2}" y="28" text-anchor="middle" fill="#e2e8f0" class="mono" font-size="15" font-weight="700">${k}</text>
-    </g>`;
-  })
-  .join("\n");
-const avenChips = ["KEYBOARD-FIRST", "GMAIL · OUTLOOK · IMAP", "DESKTOP + WEB"];
-let ax = 0;
-const avenChipSvg = avenChips
-  .map((c) => {
-    const w = 24 + c.length * 7.2;
-    const g = `<g transform="translate(${ax},0)"><rect width="${w}" height="28" rx="8" fill="#12142a" stroke="#2a2e52"/>
-      <text x="${w / 2}" y="18.5" text-anchor="middle" fill="#c7cbe6" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">${c}</text></g>`;
-    ax += w + 8;
-    return g;
-  })
-  .join("\n");
-
-write(
-  "aven.svg",
-  `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 230" width="100%" height="230" fill="none">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b0d1c"/><stop offset="1" stop-color="#06070e"/></linearGradient>
-    <linearGradient id="bd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#60a5fa" stop-opacity=".8"/><stop offset=".5" stop-color="#a78bfa" stop-opacity=".35"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".8"/></linearGradient>
-    <linearGradient id="t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#bfdbfe"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient>
-    <linearGradient id="peakL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dbeafe"/><stop offset="1" stop-color="#60a5fa"/></linearGradient>
-    <linearGradient id="peakR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#93c5fd"/><stop offset="1" stop-color="#3b5bdb"/></linearGradient>
-    <radialGradient id="g" cx=".15" cy=".4" r=".5"><stop offset="0" stop-color="#3b82f6" stop-opacity=".28"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/></radialGradient>
-    <clipPath id="c"><rect x="1" y="1" width="898" height="228" rx="18"/></clipPath>
-  </defs>
-  <style>
-    ${fonts}
-    @keyframes key{0%,100%{opacity:0}8%,22%{opacity:1}34%{opacity:0}}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-    @keyframes moon{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-    .k{opacity:0;animation:key 3s ease-in-out infinite}
-    .p{animation:pulse 1.8s ease-in-out infinite}
-    .moon{animation:moon 6s ease-in-out infinite}
-  </style>
-  <g clip-path="url(#c)"><rect width="900" height="230" fill="url(#bg)"/><rect width="900" height="230" fill="url(#g)"/></g>
-  <rect x="1" y="1" width="898" height="228" rx="18" stroke="url(#bd)" stroke-width="1.3"/>
-
-  <!-- Aven mark: a faceted peak under the moon, mirrored in a lake -->
-  <g transform="translate(36,40)">
-    <rect width="150" height="150" rx="32" fill="#0d1124" stroke="#26305a"/>
-    <g class="moon"><circle cx="100" cy="40" r="11" fill="#e0e7ff"/><circle cx="105" cy="36" r="10" fill="#0d1124"/></g>
-    <path d="M75 30 L40 92 H75 Z" fill="url(#peakL)"/><path d="M75 30 L110 92 H75 Z" fill="url(#peakR)"/>
-    <path d="M75 30 L62 70 L75 62 Z" fill="#ffffff" fill-opacity=".55"/>
-    <path d="M30 96 H120" stroke="#3b4a80" stroke-width="2" stroke-linecap="round"/>
-    <path d="M75 128 L48 100 H75 Z" fill="#60a5fa" fill-opacity=".25"/><path d="M75 128 L102 100 H75 Z" fill="#3b5bdb" fill-opacity=".22"/>
-  </g>
-
-  <g transform="translate(216,48)">
-    <text x="0" y="12" fill="#60a5fa" class="mono" font-size="11.5" font-weight="700" letter-spacing=".2em">NASZ PRODUKT</text>
-    <text x="-2" y="58" fill="url(#t)" class="sans" font-size="40" font-weight="900" letter-spacing="-0.03em">Aven Business</text>
-    <text x="0" y="88" fill="#cbd5e1" class="sans" font-size="15.5">Klient poczty dla firm: prywatny, szybki,</text>
-    <text x="0" y="110" fill="#cbd5e1" class="sans" font-size="15.5">obsługiwany w całości z klawiatury.</text>
-    <g transform="translate(0,124)">${avenChipSvg}</g>
-  </g>
-
-  <g transform="translate(600,40)">
-    <rect width="132" height="26" rx="13" fill="#1f1708" stroke="#5c4310"/>
-    <circle cx="16" cy="13" r="4" fill="#fbbf24" class="p"/>
-    <text x="28" y="17.5" fill="#fcd34d" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">W PRZYGOTOWANIU</text>
-  </g>
-  <g transform="translate(600,96)">${keySvg}</g>
-  <text x="732" y="170" text-anchor="middle" fill="#5d6590" class="mono" font-size="11">j / k · e archiwum · r odpowiedz · ⌘K szukaj</text>
-</svg>`,
-);
-
 // ---------- how we work ----------
 const steps = [
   ["01", "Analiza", "cele, zakres, wycena", "#818cf8"],
@@ -324,10 +246,8 @@ const globe = (c) =>
   `<circle cx="10" cy="10" r="8.5" stroke="${c}" stroke-width="1.6"/><path d="M1.5 10h17M10 1.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5s1.2-6.1 3.8-8.5z" stroke="${c}" stroke-width="1.4"/>`;
 const mail = (c) =>
   `<rect x="1" y="3.5" width="18" height="13" rx="2.5" stroke="${c}" stroke-width="1.6"/><path d="M2 5l8 6 8-6" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>`;
-const peak = (c) => `<path d="M10 2 L2 17 H18 Z" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 2 L7.5 11 L10 9.5" stroke="${c}" stroke-width="1.3" stroke-linejoin="round"/>`;
 const gh = (c) =>
   `<path fill="${c}" d="M10 0.8a9.2 9.2 0 0 0-2.9 17.9c.46.08.63-.2.63-.44v-1.6c-2.56.56-3.1-1.1-3.1-1.1-.42-1.06-1.02-1.35-1.02-1.35-.84-.57.06-.56.06-.56.92.07 1.4.95 1.4.95.83 1.41 2.17 1 2.7.77.08-.6.32-1.01.59-1.24-2.04-.23-4.19-1.02-4.19-4.54 0-1 .36-1.83.95-2.47-.1-.23-.41-1.17.09-2.43 0 0 .77-.25 2.53.94a8.7 8.7 0 0 1 4.6 0c1.76-1.19 2.53-.94 2.53-.94.5 1.26.19 2.2.09 2.43.59.64.95 1.46.95 2.47 0 3.53-2.15 4.3-4.2 4.53.33.29.62.85.62 1.71v2.54c0 .25.17.53.64.44A9.2 9.2 0 0 0 10 .8z"/>`;
 button("btn-website.svg", "MONORISE.STUDIO", "#a78bfa", globe, 214);
 button("btn-email.svg", "NAPISZ DO NAS", "#f472b6", mail, 200);
-button("btn-aven.svg", "GET-AVEN.COM", "#60a5fa", peak, 192);
 button("btn-github.svg", "ZESPÓŁ", "#fbbf24", gh, 140);

@@ -70,7 +70,7 @@
   <g transform="translate(790,11)">
     <rect width="186" height="24" rx="12" fill="#0a0b16" stroke="#1f2340"/>
     <circle cx="16" cy="12" r="4" fill="#34d399"/><circle cx="16" cy="12" r="4" stroke="#34d399" class="ping"/>
-    <text x="28" y="16.5" fill="#cbd5e1" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">BUDUJEMY: AVEN</text>
+    <text x="28" y="16.5" fill="#cbd5e1" class="mono" font-size="10.5" font-weight="700" letter-spacing=".06em">MONORISE TEAM · PL</text>
   </g>
 
   <!-- mark: a sunrise over an M-shaped ridge -->
@@ -100,11 +100,11 @@
       <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">DESKTOP</text>
     </g>
 <g transform="translate(164,0)">
-      <rect width="94.8" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
+      <rect width="56.8" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
       <circle cx="16" cy="16" r="3.5" fill="#f472b6"/>
-      <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">PRODUKTY</text>
+      <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">API</text>
     </g>
-<g transform="translate(268.8,0)">
+<g transform="translate(230.8,0)">
       <rect width="110" height="32" rx="9" fill="url(#chip)" stroke="#2e3350"/>
       <circle cx="16" cy="16" r="3.5" fill="#fbbf24"/>
       <text x="27" y="20.5" fill="#e2e8f0" class="mono" font-size="11" font-weight="700" letter-spacing="0.06em">OLKUSZ, PL</text>
