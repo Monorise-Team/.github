@@ -1,4 +1,4 @@
-name: Team stats
+name: Organization stats
 
 on:
   schedule:
@@ -24,7 +24,6 @@ jobs:
       - name: Draw the cards
         env:
           GITHUB_TOKEN: ${{ secrets.STATS_TOKEN || secrets.GITHUB_TOKEN }}
-          TEAM: ${{ vars.TEAM }}
         run: node scripts/stats.mjs out
       - name: Publish to the stats branch
         run: |
