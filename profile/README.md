@@ -15,7 +15,7 @@
 ### 📊 Aktywność zespołu
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/stats/stats.svg" width="100%" alt="Aktywność zespołu Monorise w ostatnich 12 miesiącach" />
+  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/stats.svg" width="100%" alt="Aktywność zespołu Monorise w ostatnich 12 miesiącach" />
 </div>
 
 <p align="center">
