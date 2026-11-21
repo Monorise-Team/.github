@@ -12,25 +12,25 @@
 
 <br/>
 
-### 📊 Aktywność i statystyki zespołu
+### 📊 Aktywność i statystyki
 
 <div align="center">
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/stats.svg" height="170" alt="Statystyki zespołu" />
+  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/stats.svg" height="170" alt="Statystyki Monorise" />
   &nbsp;
   <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/top-langs.svg" height="170" alt="Najczęstsze języki" />
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/streak.svg" alt="Seria kontrybucji zespołu" />
+  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/streak.svg" alt="Seria commitów Monorise" />
 </p>
 </div>
 
-### ⚡ Codzienne tempo zespołu
+### ⚡ Codzienne tempo
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/snake.svg" width="100%" alt="Wąż zjadający kontrybucje zespołu" />
+  <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/snake.svg" width="100%" alt="Wąż zjadający commity Monorise" />
 </div>
 
 ### 🧭 Jak pracujemy
@@ -70,7 +70,7 @@
 
 > [!NOTE]
 > **Dlaczego publicznych repozytoriów jest tu niewiele?**
-> Większość naszej pracy to projekty dla klientów, więc ich kod zostaje prywatny, a statystyki powyżej obejmują pracę całego zespołu, także w repozytoriach prywatnych. 🔒 Chętnie pokażemy przykłady realizacji w rozmowie.
+> Większość naszej pracy to projekty dla klientów, więc ich kod zostaje prywatny, a statystyki powyżej liczą wszystkie repozytoria organizacji, także prywatne. 🔒 Chętnie pokażemy przykłady realizacji w rozmowie.
 
 ### 🤝 Porozmawiajmy
 

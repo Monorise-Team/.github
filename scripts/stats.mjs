@@ -1,16 +1,14 @@
-// Draws the team cards on the stats branch: stats.svg, top-langs.svg,
-// streak.svg and snake.svg, from real GitHub data of the whole team.
-// The team's logins come from the TEAM variable (comma separated), so the
-// public script does not list them; the cards show only team totals.
-// Usage: GITHUB_TOKEN=... TEAM=a,b [ORG=Monorise-Team] node scripts/stats.mjs out
+// Draws the organization's cards on the stats branch: stats.svg, top-langs.svg,
+// streak.svg and snake.svg, from the repositories the organization owns (public
+// and, with a token that can read them, private). Members' own projects are not counted.
+// Usage: GITHUB_TOKEN=... [ORG=Monorise-Team] node scripts/stats.mjs out
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const token = process.env.GITHUB_TOKEN;
-const team = (process.env.TEAM ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const org = process.env.ORG ?? "Monorise-Team";
 const out = process.argv[2] ?? "out";
-if (!token || team.length === 0) throw new Error("GITHUB_TOKEN and TEAM are required");
+if (!token) throw new Error("GITHUB_TOKEN is required");
 mkdirSync(out, { recursive: true });
 
 async function gql(query, variables) {
@@ -30,55 +28,70 @@ async function gql(query, variables) {
 const REPO_FIELDS = `nodes { nameWithOwner isFork stargazerCount languages(first: 12, orderBy: { field: SIZE, direction: DESC }) { edges { size node { name color } } } }`;
 
 // ---------- data ----------
-const repos = new Map(); // nameWithOwner -> repo (deduplicated across members and org)
-const byDate = new Map();
-const totals = { commits: 0, prs: 0, issues: 0, reviews: 0, privateCount: 0, followers: 0, contributedTo: 0 };
-
-for (const login of team) {
-  const base = await gql(
-    `query($login: String!) { user(login: $login) {
-      followers { totalCount }
-      repositoriesContributedTo(contributionTypes: [COMMIT, PULL_REQUEST, ISSUE, REPOSITORY]) { totalCount }
-      contributionsCollection { contributionYears }
-      repositories(first: 100, ownerAffiliations: OWNER) { ${REPO_FIELDS} }
-    } }`,
-    { login },
+const repos = [];
+for (let cursor = null; ; ) {
+  const d = await gql(
+    `query($org: String!, $cursor: String) { organization(login: $org) { repositories(first: 50, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes { name isFork isPrivate stargazerCount
+        languages(first: 12, orderBy: { field: SIZE, direction: DESC }) { edges { size node { name color } } }
+        pullRequests { totalCount } issues { totalCount }
+        defaultBranchRef { name } }
+    } } }`,
+    { org, cursor },
   );
-  const u = base.user;
-  totals.followers += u.followers.totalCount;
-  totals.contributedTo += u.repositoriesContributedTo.totalCount;
-  for (const r of u.repositories.nodes) if (!r.isFork) repos.set(r.nameWithOwner, r);
-  for (const year of u.contributionsCollection.contributionYears) {
-    const from = `${year}-01-01T00:00:00Z`;
-    const to = `${year}-12-31T23:59:59Z`;
-    const y = await gql(
-      `query($login: String!, $from: DateTime!, $to: DateTime!) { user(login: $login) { contributionsCollection(from: $from, to: $to) {
-        totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions restrictedContributionsCount
-        contributionCalendar { weeks { contributionDays { date contributionCount } } }
-      } } }`,
-      { login, from, to },
+  const page = d.organization.repositories;
+  repos.push(...page.nodes.filter((r) => !r.isFork));
+  if (!page.pageInfo.hasNextPage) break;
+  cursor = page.pageInfo.endCursor;
+}
+
+// every commit on each default branch, by day
+const byDate = new Map();
+const authors = new Set();
+let commitsAll = 0;
+for (const r of repos) {
+  if (!r.defaultBranchRef) continue;
+  for (let cursor = null, page = 0; page < 100; page++) {
+    const d = await gql(
+      `query($org: String!, $name: String!, $cursor: String) { repository(owner: $org, name: $name) { defaultBranchRef { target { ... on Commit {
+        history(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { committedDate author { email user { login } } } }
+      } } } } }`,
+      { org, name: r.name, cursor },
     );
-    const c = y.user.contributionsCollection;
-    totals.commits += c.totalCommitContributions;
-    totals.prs += c.totalPullRequestContributions;
-    totals.issues += c.totalIssueContributions;
-    totals.reviews += c.totalPullRequestReviewContributions;
-    totals.privateCount += c.restrictedContributionsCount;
-    for (const w of c.contributionCalendar.weeks)
-      for (const d of w.contributionDays) byDate.set(d.date, (byDate.get(d.date) ?? 0) + d.contributionCount);
+    const h = d.repository.defaultBranchRef.target.history;
+    for (const c of h.nodes) {
+      const day = c.committedDate.slice(0, 10);
+      byDate.set(day, (byDate.get(day) ?? 0) + 1);
+      commitsAll++;
+      const who = c.author?.user?.login ?? c.author?.email;
+      if (who && !/\[bot\]|github-actions/.test(who)) authors.add(who.toLowerCase());
+    }
+    if (!h.pageInfo.hasNextPage) break;
+    cursor = h.pageInfo.endCursor;
   }
 }
-const orgData = await gql(`query($org: String!) { organization(login: $org) { repositories(first: 100) { ${REPO_FIELDS} } } }`, { org });
-for (const r of orgData.organization.repositories.nodes) if (!r.isFork) repos.set(r.nameWithOwner, r);
+const totals = {
+  prs: repos.reduce((s, r) => s + r.pullRequests.totalCount, 0),
+  issues: repos.reduce((s, r) => s + r.issues.totalCount, 0),
+};
 
+// fill the calendar from the first commit (or a year back) to today
 const today = new Date().toISOString().slice(0, 10);
-const days = [...byDate.entries()].filter(([d]) => d <= today).sort(([a], [b]) => a.localeCompare(b));
-const allTotal = days.reduce((s, [, c]) => s + c, 0);
-const stars = [...repos.values()].reduce((s, r) => s + r.stargazerCount, 0);
-const commitsAll = totals.commits + totals.privateCount;
+const yearAgo = new Date(Date.now() - 370 * 864e5).toISOString().slice(0, 10);
+const startDay = [...byDate.keys(), yearAgo].sort()[0];
+const days = [];
+for (let t = Date.parse(startDay + "T00:00:00Z"); ; t += 864e5) {
+  const d = new Date(t).toISOString().slice(0, 10);
+  if (d > today) break;
+  days.push([d, byDate.get(d) ?? 0]);
+}
+const allTotal = commitsAll;
+const stars = repos.reduce((s, r) => s + r.stargazerCount, 0);
+const privateRepos = repos.filter((r) => r.isPrivate).length;
 
 // streaks
-const firstActive = days.find(([, c]) => c > 0)?.[0] ?? today;
+const firstActive = days.find(([, c]) => c > 0)?.[0] ?? "";
 let longest = { len: 0, start: "", end: "" };
 let runStart = "", run = 0;
 for (const [d, c] of days) {
@@ -95,7 +108,7 @@ for (let i = days.length - 1; i >= 0; i--) {
 
 // languages by code size
 const langs = new Map();
-for (const r of repos.values())
+for (const r of repos)
   for (const e of r.languages.edges) {
     const l = langs.get(e.node.name) ?? { size: 0, color: e.node.color ?? "#8b93b5" };
     l.size += e.size;
@@ -108,10 +121,10 @@ const topLangs = [...langs.entries()].sort((a, b) => b[1].size - a[1].size).slic
 // rank, the github-readme-stats formula
 const expCdf = (x) => 1 - 2 ** -x;
 const logCdf = (x) => x / (1 + x);
-const W = { commits: 2, prs: 3, issues: 1, reviews: 1, stars: 4, followers: 1 };
+const W = { commits: 2, prs: 3, issues: 1, stars: 4, people: 1 };
 const score =
   W.commits * expCdf(commitsAll / 1000) + W.prs * expCdf(totals.prs / 50) + W.issues * expCdf(totals.issues / 25) +
-  W.reviews * expCdf(totals.reviews / 2) + W.stars * logCdf(stars / 50) + W.followers * logCdf(totals.followers / 10);
+  W.stars * logCdf(stars / 50) + W.people * logCdf(authors.size / 10);
 const percentile = (1 - score / Object.values(W).reduce((a, b) => a + b, 0)) * 100;
 const levels = [[1, "S"], [12.5, "A+"], [25, "A"], [37.5, "A-"], [50, "B+"], [62.5, "B"], [75, "B-"], [87.5, "C+"], [100, "C"]];
 const grade = levels.find(([t]) => percentile <= t)?.[1] ?? "C";
@@ -122,7 +135,7 @@ const C = { bg: "#0d1117", title: "#a78bfa", icon: "#f472b6", text: "#c0caf5", m
 const fmt = (n) => n.toLocaleString("pl-PL").replace(/\s/g, " ");
 const months = ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"];
 const plDate = (iso, withYear = true) => { const [y, m, d] = iso.split("-"); return `${Number(d)} ${months[Number(m) - 1]}${withYear ? ` ${y}` : ""}`; };
-const range = (a, b) => (a ? `${plDate(a, a.slice(0, 4) !== b.slice(0, 4))} - ${b === today ? "dziś" : plDate(b)}` : "-");
+const range = (a, b) => (a === today && b === today ? "dziś" : a ? `${plDate(a, a.slice(0, 4) !== b.slice(0, 4))} - ${b === today ? "dziś" : plDate(b)}` : "-");
 const style = `<style>
   .t{font:600 18px ${SANS};fill:${C.title}}
   .s{font:600 14px ${SANS};fill:${C.text}}
@@ -149,14 +162,14 @@ const ICON = {
 // stats.svg
 const rows = [
   ["star", "Gwiazdki łącznie", fmt(stars)],
-  ["commit", "Commity i prace prywatne", fmt(commitsAll)],
+  ["commit", "Commity", fmt(commitsAll)],
   ["pr", "Pull requesty", fmt(totals.prs)],
   ["issue", "Zgłoszenia (issues)", fmt(totals.issues)],
-  ["repo", "Repozytoria z wkładem", fmt(totals.contributedTo)],
+  ["repo", "Repozytoria", privateRepos ? `${repos.length} (${privateRepos} prywatne)` : fmt(repos.length)],
 ];
 const ringPct = Math.max(0.05, Math.min(1, 1 - percentile / 100));
 const statsBody = `
-  <text x="25" y="35" class="t f">Statystyki zespołu Monorise</text>
+  <text x="25" y="35" class="t f">Statystyki Monorise</text>
   ${rows.map(([icon, label, value], i) => `<g transform="translate(25,${62 + i * 25})" class="f" style="animation-delay:${(i + 3) * 150}ms">
     <svg width="16" height="16" viewBox="0 0 16 16" y="-12.5"><path fill="${C.icon}" d="${ICON[icon]}"/></svg>
     <text x="25" class="s">${label}:</text><text x="230" class="b">${value}</text></g>`).join("")}
@@ -184,7 +197,7 @@ const streakBody = `
   <path d="M165 28 V170 M330 28 V170" stroke="#2a2e45"/>
   <g transform="translate(82.5,0)" class="f" style="animation-delay:.2s">
     <text y="80" text-anchor="middle" style="font:700 28px ${SANS};fill:${C.title}">${fmt(allTotal)}</text>
-    <text y="118" text-anchor="middle" class="s">Kontrybucje łącznie</text>
+    <text y="118" text-anchor="middle" class="s">Commity łącznie</text>
     <text y="142" text-anchor="middle" class="m">${range(firstActive, today)}</text>
   </g>
   <g transform="translate(247.5,0)">
@@ -244,4 +257,4 @@ writeFileSync(
   <g clip-path="url(#g)">${cellSvg}${snakeSvg}</g></svg>\n`,
 );
 
-console.log(`stats: ${allTotal} contributions since ${firstActive}, ${commitsAll} commits, ${totals.prs} PRs, ${stars} stars, ${repos.size} repos, ${topLangs.length} languages, rank ${grade}, streak ${current.len}/${longest.len}`);
+console.log(`stats: ${commitsAll} commits since ${firstActive}, ${authors.size} authors, ${totals.prs} PRs, ${stars} stars, ${repos.length} repos (${privateRepos} private), ${topLangs.length} languages, rank ${grade}, streak ${current.len}/${longest.len}`);
