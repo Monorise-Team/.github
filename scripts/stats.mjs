@@ -149,7 +149,7 @@ const ICON = {
 // stats.svg
 const rows = [
   ["star", "Gwiazdki łącznie", fmt(stars)],
-  ["commit", "Commity (wszystkie lata)", fmt(commitsAll)],
+  ["commit", "Commity i prace prywatne", fmt(commitsAll)],
   ["pr", "Pull requesty", fmt(totals.prs)],
   ["issue", "Zgłoszenia (issues)", fmt(totals.issues)],
   ["repo", "Repozytoria z wkładem", fmt(totals.contributedTo)],

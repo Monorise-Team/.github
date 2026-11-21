@@ -1,0 +1,21 @@
+name: ✨ Pomysł
+description: Nowa funkcja albo usprawnienie.
+labels: ["type: feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Jaki problem rozwiązuje?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proponowane rozwiązanie
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Nakład pracy
+      options: ["Mały", "Średni", "Duży"]
