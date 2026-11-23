@@ -4,17 +4,34 @@
     "kind": "main",
     "public": true,
     "areas": [],
-    "checks": ["check"]
+    "checks": [
+      "check"
+    ]
   },
   "MonoriseDocumentation": {
     "kind": "main",
     "public": false,
     "areas": [
-      { "name": "adr", "description": "Decyzje architektoniczne i ich indeks" },
-      { "name": "architecture", "description": "Architektura, dane, API i zdarzenia" },
-      { "name": "infrastructure", "description": "AWS, DNS, hosting, koszty" },
-      { "name": "engineering", "description": "Repozytoria, proces pracy, CI/CD, biblioteki" },
-      { "name": "products", "description": "Karty produktów i plan budowy" }
+      {
+        "name": "adr",
+        "description": "Decyzje architektoniczne i ich indeks"
+      },
+      {
+        "name": "architecture",
+        "description": "Architektura, dane, API i zdarzenia"
+      },
+      {
+        "name": "infrastructure",
+        "description": "AWS, DNS, hosting, koszty"
+      },
+      {
+        "name": "engineering",
+        "description": "Repozytoria, proces pracy, CI/CD, biblioteki"
+      },
+      {
+        "name": "products",
+        "description": "Karty produktów i plan budowy"
+      }
     ],
     "checks": []
   },
@@ -22,38 +39,177 @@
     "kind": "production",
     "public": true,
     "areas": [
-      { "name": "website", "description": "Strony i treść monorise.studio" },
-      { "name": "design", "description": "Wygląd, grafiki, animacje" },
-      { "name": "seo", "description": "Metadane, obrazy podglądu, mapa strony" },
-      { "name": "ci", "description": "Kontrole, wdrożenia, Vercel" }
+      {
+        "name": "website",
+        "description": "Strony i treść monorise.studio"
+      },
+      {
+        "name": "design",
+        "description": "Wygląd, grafiki, animacje"
+      },
+      {
+        "name": "seo",
+        "description": "Metadane, obrazy podglądu, mapa strony"
+      },
+      {
+        "name": "ci",
+        "description": "Kontrole, wdrożenia, Vercel"
+      }
     ],
-    "checks": ["Lint, types and build"]
+    "checks": [
+      "Lint, types and build"
+    ]
   },
   "MonoriseShared": {
     "kind": "production",
     "public": true,
     "areas": [
-      { "name": "tokens", "description": "@monorise-team/tokens: kolory, typografia, szkło, ruch" },
-      { "name": "ui", "description": "@monorise-team/ui: komponenty React" },
-      { "name": "config", "description": "@monorise-team/config: ESLint, Prettier, TypeScript" },
-      { "name": "playground", "description": "Katalog komponentów apps/playground" },
-      { "name": "release", "description": "Wersje, publikacja w GitHub Packages, CI" }
+      {
+        "name": "tokens",
+        "description": "@monorise-team/tokens: kolory, typografia, szkło, ruch"
+      },
+      {
+        "name": "ui",
+        "description": "@monorise-team/ui: komponenty React"
+      },
+      {
+        "name": "config",
+        "description": "@monorise-team/config: ESLint, Prettier, TypeScript"
+      },
+      {
+        "name": "playground",
+        "description": "Katalog komponentów apps/playground"
+      },
+      {
+        "name": "release",
+        "description": "Wersje, publikacja w GitHub Packages, CI"
+      }
     ],
-    "checks": ["Format, lint, types, tests and build"]
+    "checks": [
+      "Format, lint, types, tests and build"
+    ]
   },
   "AvenMail": {
     "kind": "production",
     "public": true,
     "areas": [
-      { "name": "web", "description": "Poczta w przeglądarce na aven-mail.monorise.studio" },
-      { "name": "server", "description": "API i serwer aven.monorise.studio" },
-      { "name": "mail", "description": "Silnik poczty: IMAP, SMTP, parsowanie wiadomości" },
-      { "name": "desktop", "description": "Aplikacja na komputer: Tauri 2, Vite, Rust" },
-      { "name": "mobile", "description": "Aplikacja na telefon: Expo" },
-      { "name": "accounts", "description": "Logowanie, sesje, skrzynki użytkowników" },
-      { "name": "website", "description": "Strona produktu na aven.monorise.studio" },
-      { "name": "design", "description": "Wygląd, ekrany, UX" }
+      {
+        "name": "web",
+        "description": "Poczta w przeglądarce na aven-mail.monorise.studio"
+      },
+      {
+        "name": "server",
+        "description": "API i serwer aven.monorise.studio"
+      },
+      {
+        "name": "mail",
+        "description": "Silnik poczty: IMAP, SMTP, parsowanie wiadomości"
+      },
+      {
+        "name": "desktop",
+        "description": "Aplikacja na komputer: Tauri 2, Vite, Rust"
+      },
+      {
+        "name": "mobile",
+        "description": "Aplikacja na telefon: Expo"
+      },
+      {
+        "name": "accounts",
+        "description": "Logowanie, sesje, skrzynki użytkowników"
+      },
+      {
+        "name": "website",
+        "description": "Strona produktu na aven.monorise.studio"
+      },
+      {
+        "name": "design",
+        "description": "Wygląd, ekrany, UX"
+      }
     ],
-    "checks": ["Format, lint, types, tests and build"]
+    "checks": [
+      "Format, lint, types, tests and build"
+    ]
+  },
+  "MonoriseCore": {
+    "kind": "production",
+    "public": true,
+    "areas": [
+      {
+        "name": "auth",
+        "description": "Logowanie auth.monorise.studio: Better Auth, OAuth, MFA, sesje"
+      },
+      {
+        "name": "api",
+        "description": "Core API api.monorise.studio (Fastify)"
+      },
+      {
+        "name": "organizations",
+        "description": "Firmy, domeny i ich weryfikacja"
+      },
+      {
+        "name": "employees",
+        "description": "Pracownicy, konta, zaproszenia i struktura firmy"
+      },
+      {
+        "name": "permissions",
+        "description": "Role, uprawnienia i dostęp do aplikacji"
+      },
+      {
+        "name": "events",
+        "description": "Zdarzenia, outbox i dziennik"
+      },
+      {
+        "name": "db",
+        "description": "Baza monorise_core, migracje i RLS"
+      },
+      {
+        "name": "security",
+        "description": "Bezpieczeństwo i separacja danych firm"
+      }
+    ],
+    "checks": [
+      "Format, lint, types, tests and build"
+    ]
+  },
+  "TimoTime": {
+    "kind": "production",
+    "public": true,
+    "areas": [
+      {
+        "name": "web",
+        "description": "Aplikacja w przeglądarce na timo-time.monorise.studio"
+      },
+      {
+        "name": "server",
+        "description": "API i serwer time.monorise.studio"
+      },
+      {
+        "name": "mobile",
+        "description": "Aplikacja na telefon: Expo"
+      },
+      {
+        "name": "time",
+        "description": "Rejestracja czasu, statusy i obecność"
+      },
+      {
+        "name": "leave",
+        "description": "Wnioski urlopowe i limity"
+      },
+      {
+        "name": "reports",
+        "description": "Raporty i eksport"
+      },
+      {
+        "name": "website",
+        "description": "Strona produktu na time.monorise.studio"
+      },
+      {
+        "name": "design",
+        "description": "Wygląd, ekrany, UX"
+      }
+    ],
+    "checks": [
+      "Format, lint, types, tests and build"
+    ]
   }
 }
