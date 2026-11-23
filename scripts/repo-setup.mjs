@@ -9,6 +9,7 @@
  *       etykiety z labels/common.json i obszary area: z labels/repos.json (tworzy brakujące, poprawia różniące się)
  *   node scripts/repo-setup.mjs protect <Repo> [--dry-run]
  *       ustawienia repozytorium (scalanie przez merge commit, usuwanie gałęzi po scaleniu, gałąź domyślna dev),
+ *       uprawnienia GitHub Actions (token tylko do odczytu, zgoda na pull requesty od automatów),
  *       reguły ochrony gałęzi (tylko repozytoria publiczne) i prywatne zgłoszenia podatności.
  *       W repozytoriach produkcyjnych reguły nie wymagają zielonego CI: Release Please i powrót prod do dev
  *       scalają pull requesty tokenem GITHUB_TOKEN, a takie pull requesty nie uruchamiają CI. Zielone CI przed
@@ -276,6 +277,16 @@ function protect(repo, { dryRun }) {
   if (kind === "production" && branches.has("dev") && info.default_branch !== "dev") settings.push("default_branch=dev");
   console.log(`${repo}: ustawienia ${settings.join(", ")}`);
   if (!dryRun) gh(["api", "-X", "PATCH", `repos/${ORG}/${repo}`, ...settings.flatMap((s) => ["-F", s])]);
+
+  // Release Please i powrót prod do dev otwierają i scalają pull requesty tokenem GITHUB_TOKEN. Organizacja na to
+  // pozwala, ale repozytorium może mieć własne, węższe ustawienie (tak było w MonoriseWebsite), więc je wyrównujemy.
+  const actions = { default_workflow_permissions: "read", can_approve_pull_request_reviews: true };
+  const workflow = ghJson(["api", `repos/${ORG}/${repo}/actions/permissions/workflow`]);
+  const actionsOk = Object.entries(actions).every(([key, value]) => workflow?.[key] === value);
+  console.log(`${repo}: Actions: token domyślnie tylko do odczytu, automaty mogą tworzyć pull requesty${actionsOk ? " (bez zmian)" : ""}`);
+  if (!dryRun && !actionsOk) {
+    gh(["api", "-X", "PUT", `repos/${ORG}/${repo}/actions/permissions/workflow`, "--input", "-"], { input: JSON.stringify(actions) });
+  }
 
   if (!isPublic || info.private) {
     console.log(`${repo}: repozytorium prywatne na planie Free, reguły ochrony gałęzi pomijam (ADR-0016)`);
