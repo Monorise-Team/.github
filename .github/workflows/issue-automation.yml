@@ -25,6 +25,7 @@ name: Issue automation
 #    Task), milestone najbliższego wydania (najniższe otwarte vX.Y.Z) i powiązania z pola „Zależności”
 #    (`Czeka na: #N` -> blokowane przez #N, `Część: #N` -> etap #N). Wszystko „najlepiej, jak się da”:
 #    błąd tutaj nie zatrzymuje reszty.
+# Zgłoszenia od botów (np. panel zależności Renovate) automat pomija w całości.
 
 on:
   issues:
@@ -50,7 +51,11 @@ permissions:
 jobs:
   issue:
     name: Triage, board and sidebar
-    if: github.event.action != 'edited' || github.event.changes.title || github.event.changes.body
+    # Zgłoszeń od botów nie ruszamy: Renovate rozpoznaje swój panel zależności po tytule, a po zmianie
+    # tytułu zakładałby nowy panel przy każdym przebiegu.
+    if: >-
+      github.event.issue.user.type != 'Bot' &&
+      (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
