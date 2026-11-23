@@ -10,6 +10,7 @@ Wspólne pliki organizacji Monorise:
 | `labels/` | etykiety wspólne (`common.json`) oraz obszary i ustawienia każdego repozytorium (`repos.json`) |
 | `.github/workflows/` | automaty zgłoszeń i pull requestów, powrót `prod` do `dev`, wywoływane z repozytoriów jedną linijką |
 | `scripts/repo-setup.mjs` | rozsyła formularze, etykiety i reguły ochrony gałęzi do repozytorium |
+| `renovate-config.json` | wspólne ustawienia Renovate: `"extends": ["github>Monorise-Team/.github:renovate-config"]` w `renovate.json` repozytorium |
 
 ```bash
 node scripts/repo-setup.mjs forms AvenMail ../AvenMail/.github   # formularze i szablon PR
