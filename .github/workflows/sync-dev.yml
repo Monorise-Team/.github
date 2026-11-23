@@ -1,0 +1,62 @@
+name: Sync dev
+
+# Po każdym wypchnięciu na prod (scalony pull request dev -> prod, pilna poprawka albo wydanie Release Please)
+# scala prod z powrotem do dev, żeby dev miał zawsze wydaną wersję i historię zmian (ADR-0086).
+# Reguły ochrony gałęzi wymagają pull requestów także od automatu, więc automat otwiera pull request
+# prod -> dev i od razu go scala. Repozytoria produkcyjne wywołują go jedną linijką:
+#
+#   on:
+#     push:
+#       branches: [prod]
+#     workflow_call:
+#   permissions:
+#     contents: write
+#     pull-requests: write
+#   jobs:
+#     sync:
+#       uses: Monorise-Team/.github/.github/workflows/sync-dev.yml@main
+#
+# Konflikt kończy się błędem: wtedy rozwiąż go w tym pull requeście ręcznie.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    name: Merge prod into dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: sync-dev-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Open and merge the pull request prod -> dev
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          ahead=$(gh api "repos/$REPO/compare/dev...prod" --jq '.ahead_by')
+          if [ "$ahead" = "0" ]; then
+            echo "dev ma już wszystko z prod." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          number=$(gh pr list --repo "$REPO" --base dev --head prod --state open --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            url=$(gh pr create --repo "$REPO" --base dev --head prod --title "chore: merge prod into dev" \
+              --body "Automat po wydaniu albo pilnej poprawce: \`dev\` dostaje wersję i historię zmian z \`prod\`.")
+            number=${url##*/}
+          fi
+          # GitHub potrzebuje chwili, żeby policzyć, czy pull request da się scalić
+          for attempt in 1 2 3 4 5; do
+            if gh pr merge "$number" --repo "$REPO" --merge; then
+              echo "Scalono prod do dev (#$number)." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "::error::Nie udało się scalić #$number. Rozwiąż konflikt w tym pull requeście ręcznie."
+          exit 1

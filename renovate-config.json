@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Wspólne ustawienia Renovate organizacji Monorise (ADR-0087): aktualizacje raz w tygodniu, w grupach, wszystkie @monorise-team/* razem; nic nie aktualizuje się samo.",
+  "extends": ["config:recommended", ":semanticCommits", ":semanticCommitTypeAll(chore)", ":dependencyDashboard"],
+  "timezone": "Europe/Warsaw",
+  "schedule": ["before 6am on monday"],
+  "minimumReleaseAge": "3 days",
+  "labels": ["type: 🔧 chore", "prio: P3-low"],
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "Wspólne biblioteki Monorise: zawsze razem i od razu, bez czekania (to nasze paczki)",
+      "matchPackageNames": ["@monorise-team/**"],
+      "groupName": "@monorise-team",
+      "minimumReleaseAge": null,
+      "schedule": ["at any time"]
+    },
+    {
+      "description": "Drobne aktualizacje stabilnych zależności w jednym pull requeście",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0/",
+      "excludePackageNames": ["@monorise-team/**"],
+      "groupName": "drobne aktualizacje"
+    },
+    {
+      "description": "Narzędzia CI w jednym pull requeście",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+name: 🔒 Utwardzanie bezpieczeństwa
+description: Hardening, zasady, ryzyko zależności. NIE dla żywych podatności.
+labels:
+  - "type: 🔒 security"
+  - "meta: ❓ needs triage"
+projects:
+  - __PROJECT__
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!WARNING]
+        > **Nie używaj tego formularza do podatności, którą da się wykorzystać już teraz.** Zgłoszenie jest publiczne od chwili wysłania.
+        > Zamiast tego zgłoś ją prywatnie: __SECURITY__.
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Potwierdzenie jawności
+      options:
+        - label: To **nie jest** podatność możliwa do wykorzystania, a jej opublikowanie nikogo nie naraża
+          required: true
+
+  - type: textarea
+    id: weakness
+    attributes:
+      label: Słabość i jej skutek
+      description: Co jest słabsze, niż być powinno, i co z tego wynika?
+      placeholder: Jednorazowy kod logowania aplikacji na komputer da się użyć drugi raz w ciągu 10 minut.
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Proponowane zabezpieczenie
+      placeholder: Wiązać kod z PKCE aplikacji i unieważniać go po pierwszym użyciu albo po minucie.
+    validations:
+      required: true
+
+__AREA_WHOLE__
+__PRIORITY_ALL__
+__EFFORT__
+__RELATIONS__
