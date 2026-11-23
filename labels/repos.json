@@ -77,6 +77,14 @@
         "description": "@monorise-team/config: ESLint, Prettier, TypeScript"
       },
       {
+        "name": "auth",
+        "description": "@monorise-team/auth: tokeny dostępu, sesje BFF, wtyczka Fastify"
+      },
+      {
+        "name": "permissions",
+        "description": "@monorise-team/permissions: uprawnienia i zakresy"
+      },
+      {
         "name": "playground",
         "description": "Katalog komponentów apps/playground"
       },
