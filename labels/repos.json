@@ -1,0 +1,59 @@
+{
+  "$comment": "Ustawienia procesu dla każdego repozytorium (scripts/repo-setup.mjs). kind: production = dev, prod i flow/*; main = main i flow/*. checks: zadania CI wymagane w pull requestach (nazwy zadań, jak pokazuje je GitHub). public: reguły ochrony gałęzi działają na planie Free tylko w repozytoriach publicznych.",
+  ".github": {
+    "kind": "main",
+    "public": true,
+    "areas": [],
+    "checks": ["check"]
+  },
+  "MonoriseDocumentation": {
+    "kind": "main",
+    "public": false,
+    "areas": [
+      { "name": "adr", "description": "Decyzje architektoniczne i ich indeks" },
+      { "name": "architecture", "description": "Architektura, dane, API i zdarzenia" },
+      { "name": "infrastructure", "description": "AWS, DNS, hosting, koszty" },
+      { "name": "engineering", "description": "Repozytoria, proces pracy, CI/CD, biblioteki" },
+      { "name": "products", "description": "Karty produktów i plan budowy" }
+    ],
+    "checks": []
+  },
+  "MonoriseWebsite": {
+    "kind": "production",
+    "public": true,
+    "areas": [
+      { "name": "website", "description": "Strony i treść monorise.studio" },
+      { "name": "design", "description": "Wygląd, grafiki, animacje" },
+      { "name": "seo", "description": "Metadane, obrazy podglądu, mapa strony" },
+      { "name": "ci", "description": "Kontrole, wdrożenia, Vercel" }
+    ],
+    "checks": ["Lint, types and build"]
+  },
+  "MonoriseShared": {
+    "kind": "production",
+    "public": true,
+    "areas": [
+      { "name": "tokens", "description": "@monorise-team/tokens: kolory, typografia, szkło, ruch" },
+      { "name": "ui", "description": "@monorise-team/ui: komponenty React" },
+      { "name": "config", "description": "@monorise-team/config: ESLint, Prettier, TypeScript" },
+      { "name": "playground", "description": "Katalog komponentów apps/playground" },
+      { "name": "release", "description": "Wersje, publikacja w GitHub Packages, CI" }
+    ],
+    "checks": ["Format, lint, types, tests and build"]
+  },
+  "AvenMail": {
+    "kind": "production",
+    "public": true,
+    "areas": [
+      { "name": "web", "description": "Poczta w przeglądarce na aven-mail.monorise.studio" },
+      { "name": "server", "description": "API i serwer aven.monorise.studio" },
+      { "name": "mail", "description": "Silnik poczty: IMAP, SMTP, parsowanie wiadomości" },
+      { "name": "desktop", "description": "Aplikacja na komputer: Tauri 2, Vite, Rust" },
+      { "name": "mobile", "description": "Aplikacja na telefon: Expo" },
+      { "name": "accounts", "description": "Logowanie, sesje, skrzynki użytkowników" },
+      { "name": "website", "description": "Strona produktu na aven.monorise.studio" },
+      { "name": "design", "description": "Wygląd, ekrany, UX" }
+    ],
+    "checks": ["Format, lint, types, tests and build"]
+  }
+}

@@ -1,0 +1,50 @@
+name: ✨ Nowa funkcja
+description: Nowa możliwość dla użytkownika albo rozbudowa istniejącej.
+labels:
+  - "type: ✨ feature"
+  - "meta: ❓ needs triage"
+projects:
+  - __PROJECT__
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Czego użytkownik dzisiaj nie może zrobić i dlaczego to boli?
+      placeholder: Anna z Acme dostaje ok. 100 maili dziennie i nie może odłożyć wątku na później, więc ważne sprawy giną.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propozycja
+      description: Co ma się dziać zamiast tego. Opisz zachowanie, nie kod. Makiety wrzuć tutaj.
+      placeholder: Wątek można odłożyć do wybranej daty i godziny; wraca na górę skrzynki z przypomnieniem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Kryteria akceptacji
+      description: Po czym poznamy, że gotowe. Z tego powstanie lista kontrolna w pull requeście.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+__AREA__
+__PRIORITY__
+__EFFORT__
+  - type: textarea
+    id: scope
+    attributes:
+      label: Poza zakresem
+      description: Opcjonalne, ale skuteczne. Czego to zgłoszenie celowo nie robi.
+      placeholder: Odkładanie na serwerze dostawcy poczty, synchronizacja odłożonych między urządzeniami.
+    validations:
+      required: false
+
+__RELATIONS__

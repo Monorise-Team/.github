@@ -1,0 +1,21 @@
+[
+  { "name": "type: ✨ feature", "color": "0E5FD8", "description": "Nowa możliwość dla użytkownika albo rozbudowa istniejącej" },
+  { "name": "type: 🐛 bugfix", "color": "1F6FEB", "description": "Coś działa niepoprawnie i wymaga naprawy" },
+  { "name": "type: ♻️ refactor", "color": "3D8BFD", "description": "Zmiana kształtu kodu bez zmiany zachowania" },
+  { "name": "type: ⚡ perf", "color": "0FA5A5", "description": "Szybkość, czas ładowania albo zużycie zasobów" },
+  { "name": "type: 🔧 chore", "color": "6E8CA0", "description": "Utrzymanie: zależności, konfiguracja, build, porządki" },
+  { "name": "type: 📚 docs", "color": "59A5F5", "description": "Dokumentacja, README, komentarze w kodzie" },
+  { "name": "type: 🧪 test", "color": "17A2B8", "description": "Nowe albo lepsze testy, bez zmiany zachowania" },
+  { "name": "type: 🔒 security", "color": "0A3069", "description": "Utwardzanie bezpieczeństwa, ryzyko zależności, logowanie" },
+  { "name": "type: 🔍 spike", "color": "8AB4F8", "description": "Rozpoznanie: efektem jest decyzja, a nie kod" },
+  { "name": "prio: P0-critical", "color": "B60205", "description": "Produkcja leży albo dane są zagrożone, rzucamy wszystko" },
+  { "name": "prio: P1-high", "color": "D93F0B", "description": "Ważne, blokuje bieżący milestone" },
+  { "name": "prio: P2-medium", "color": "FBCA04", "description": "Do zrobienia, poczeka na wolne miejsce" },
+  { "name": "prio: P3-low", "color": "0E8A16", "description": "Miło mieć, bez terminu" },
+  { "name": "meta: ❓ needs triage", "color": "EAC54F", "description": "Nowe, jeszcze bez typu, obszaru i priorytetu" },
+  { "name": "meta: 🚧 blocked", "color": "C05621", "description": "Czeka na zależność z zewnątrz, decyzję albo inne zgłoszenie" },
+  { "name": "meta: 💬 needs discussion", "color": "F5A623", "description": "Wymaga decyzji przed napisaniem kodu" },
+  { "name": "meta: 💥 breaking change", "color": "B45309", "description": "Łamie istniejące API, kontrakt albo sposób pracy użytkownika" },
+  { "name": "meta: 🗑️ wontfix", "color": "9CA3AF", "description": "Zasadne, ale celowo nie będzie robione" },
+  { "name": "meta: ♊ duplicate", "color": "CBD5E1", "description": "Już opisane w innym zgłoszeniu" }
+]

@@ -1,0 +1,49 @@
+name: 🐛 Zgłoszenie błędu
+description: Coś działa niepoprawnie, wywala się albo zwraca zły wynik.
+labels:
+  - "type: 🐛 bugfix"
+  - "meta: ❓ needs triage"
+projects:
+  - __PROJECT__
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Co się dzieje
+      description: Co jest zepsute i jaki błąd widzisz. Wklej treść błędu, jeśli jakiś jest.
+      placeholder: "Wysłanie maila z załącznikiem ponad 10 MB nic nie robi, w konsoli „SMTP error: 552”."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Kroki do odtworzenia
+      description: Tak, żeby ktoś inny mógł to powtórzyć.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: expected
+    attributes:
+      label: Czego się spodziewasz
+      placeholder: Mail wychodzi z załącznikiem i ląduje w Wysłanych.
+    validations:
+      required: true
+
+__AREA__
+__PRIORITY_ALL__
+__EFFORT__
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logi / zrzuty ekranu
+      description: Opcjonalne. Obrazki możesz przeciągnąć prosto tutaj. Nie wklejaj haseł, tokenów ani treści cudzych maili.
+    validations:
+      required: false
+
+__RELATIONS__

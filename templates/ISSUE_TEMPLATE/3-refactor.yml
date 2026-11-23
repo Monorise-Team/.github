@@ -1,0 +1,49 @@
+name: ♻️ Refaktor / wydajność
+description: Poprawa kształtu albo szybkości istniejącego kodu, bez zmiany tego, co robi.
+labels:
+  - "type: ♻️ refactor"
+  - "meta: ❓ needs triage"
+projects:
+  - __PROJECT__
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Rodzaj
+      description: "Wydajność dostaje przy triage etykietę `type: ⚡ perf`."
+      options:
+        - Refaktor, czyli struktura, czytelność, duplikacja
+        - Wydajność, czyli szybkość, pamięć, rozmiar paczki, koszt zapytań
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Co jest nie tak i dlaczego to boli
+      description: Konkretny koszt, np. wywołane błędy, stracony czas, wolniejsze ekrany.
+      placeholder: Odświeżanie połączenia IMAP jest powielone w trzech miejscach; w tym miesiącu dwa błędy wzięły się z miejsca, które o nim zapomniało.
+    validations:
+      required: true
+
+  - type: textarea
+    id: target
+    attributes:
+      label: Stan docelowy
+      placeholder: Jedna funkcja `withMailbox(account, fn)` używana wszędzie.
+    validations:
+      required: true
+
+__AREA__
+__PRIORITY__
+__EFFORT__
+  - type: input
+    id: safety
+    attributes:
+      label: Jak sprawdzimy, że nic się nie zepsuło
+      description: Opcjonalne. Refaktor bez siatki bezpieczeństwa to przepisywanie.
+      placeholder: Testy obejmują ponowne połączenie i wygaśnięcie sesji.
+    validations:
+      required: false
+
+__RELATIONS__

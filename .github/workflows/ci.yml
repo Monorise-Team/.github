@@ -19,6 +19,19 @@ jobs:
           node-version: 22
       - name: Scripts parse
         run: for f in scripts/*.mjs; do node --check "$f"; done
+      - name: Issue forms match the templates
+        run: node scripts/repo-setup.mjs forms .github .github --check
+      - name: Workflows and forms are valid YAML
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'PY2'
+          import glob, sys, yaml
+          bad = 0
+          for f in sorted(glob.glob(".github/**/*.yml", recursive=True)):
+              try: yaml.safe_load(open(f, encoding="utf-8"))
+              except yaml.YAMLError as e: print(f"::error file={f}::{e}"); bad += 1
+          sys.exit(bad)
+          PY2
       - name: Assets match their generator
         run: |
           node scripts/generate-assets.mjs

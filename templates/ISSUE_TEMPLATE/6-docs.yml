@@ -1,0 +1,29 @@
+name: 📚 Dokumentacja
+description: Czegoś brakuje, coś jest błędne, nieaktualne albo niejasne.
+labels:
+  - "type: 📚 docs"
+  - "meta: ❓ needs triage"
+projects:
+  - __PROJECT__
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Gdzie
+      description: Ścieżka do pliku, adres albo nazwa sekcji.
+      placeholder: README.md, sekcja „Uruchomienie lokalne”
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Co jest nie tak
+      description: Brakuje, błędne, nieaktualne czy niejasne, i na czym to polega.
+      placeholder: Brakuje informacji, że przed `pnpm dev` trzeba uruchomić bazę w Dockerze. Na świeżym klonie serwer nie startuje.
+    validations:
+      required: true
+
+__PRIORITY__
+__EFFORT__
+__RELATIONS__

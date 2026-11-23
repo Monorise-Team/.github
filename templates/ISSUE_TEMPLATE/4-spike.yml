@@ -1,0 +1,41 @@
+name: 🔍 Spike / rozpoznanie
+description: Ograniczone czasowo śledztwo. Efektem jest decyzja, a nie wdrożony kod.
+labels:
+  - "type: 🔍 spike"
+  - "meta: ❓ needs triage"
+projects:
+  - __PROJECT__
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Pytanie
+      description: Jedno pytanie, na które odpowiedź coś rozstrzyga. Napisz też, co jest nim zablokowane.
+      placeholder: Czy serwer AvenMail utrzyma połączenia IMAP IDLE na Vercel, czy potrzebny jest kontener? Blokuje wybór miejsca działania serwera.
+    validations:
+      required: true
+
+  - type: input
+    id: timebox
+    attributes:
+      label: Limit czasu
+      description: Sztywna granica. Gdy się skończy, spisujesz, co wiesz, nawet jeśli odpowiedź brzmi „dalej nie wiadomo”.
+      placeholder: 1 dzień
+    validations:
+      required: true
+
+__AREA__
+__PRIORITY__
+__EFFORT__
+  - type: textarea
+    id: options
+    attributes:
+      label: Opcje i kryteria
+      description: Opcjonalne. Kandydaci, o których już wiesz, i co decyduje o wyborze.
+      placeholder: |
+        Kontener na AWS / funkcje Vercel / osobny worker
+        Decyduje: nowa poczta widoczna w mniej niż 5 sekund, koszt.
+    validations:
+      required: false
+
+__RELATIONS__

@@ -1,0 +1,5 @@
+# Wspólne pola formularzy (wstawiane przez scripts/repo-setup.mjs w miejsce znaczników):
+#   __AREA__      lista obszarów repozytorium (albo nic, gdy repozytorium ich nie ma)
+#   __PRIORITY__  priorytet; __PRIORITY_ALL__ także z P0-critical
+#   __EFFORT__    nakład pracy
+#   __RELATIONS__ zależności od innych zgłoszeń

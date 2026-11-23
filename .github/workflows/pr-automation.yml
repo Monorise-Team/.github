@@ -1,0 +1,178 @@
+name: PR automation
+
+# Wspólny automat pull requestów organizacji (ADR-0086), wzorowany na repozytorium Aven. Działa w tym
+# repozytorium, a pozostałe wywołują go jedną linijką (workflow_call), np.:
+#
+#   on:
+#     pull_request:
+#       types: [opened, edited, reopened]
+#   permissions:
+#     pull-requests: write
+#     issues: write
+#   jobs:
+#     pr:
+#       uses: Monorise-Team/.github/.github/workflows/pr-automation.yml@main
+#
+# 1. Nazwa gałęzi: flow/<typ>/<numer>-<opis>, <numer> to istniejące zgłoszenie (inaczej zadanie jest czerwone).
+#    Do prod wolno tylko z dev albo z flow/hotfix/<numer>-<opis> tego samego repozytorium.
+# 2. Tytuł i etykieta: flow/chore/012-release-builds „Buildy tylko z prod i dev”
+#    -> „🔧 Chore: [012] Buildy tylko z prod i dev” i etykieta type:. Wydanie dev -> prod: „🚀 Release: dev → prod”.
+# 3. Panel boczny: autor jako osoba przypisana, etykiety area:/prio: i milestone ze zgłoszenia (albo najbliższego
+#    wydania) oraz „Closes #<numer>”, gdy brakuje go w opisie.
+#
+# Bez checkoutu: żaden kod z pull requestu nie działa z tym tokenem. Zmiana nazwy przez GITHUB_TOKEN nie
+# uruchamia kolejnych workflowów.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+  workflow_call:
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  title:
+    name: Branch name, title and type label
+    if: github.event.action != 'edited' || github.event.changes.title || github.event.changes.base
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Branch name and release source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const TYPES = ['feature', 'bugfix', 'refactor', 'perf', 'chore', 'docs', 'security', 'spike', 'test', 'hotfix'];
+            const pr = context.payload.pull_request;
+            const branch = pr.head.ref;
+            const base = pr.base.ref;
+            const sameRepo = pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+
+            const fail = async (msg, hint) => {
+              await core.summary.addHeading('❌ Zła nazwa albo kierunek gałęzi', 2)
+                .addRaw(`Gałąź: \`${branch}\` → \`${base}\`\n\n**${msg}**\n\n${hint}\n`).write();
+              core.setFailed(msg);
+            };
+
+            // Do prod tylko wydanie z dev albo pilna poprawka
+            if (base === 'prod') {
+              const allowed = sameRepo && (branch === 'dev' || /^flow\/hotfix\//.test(branch) || branch.startsWith('release-please--'));
+              if (!allowed) {
+                return fail(`Do prod nie wolno z gałęzi '${branch}'.`,
+                  'Do `prod` trafia tylko pull request wydania z `dev` albo pilna poprawka `flow/hotfix/<numer>-<opis>` z tego repozytorium.');
+              }
+            } else if (/^flow\/hotfix\//.test(branch)) {
+              return fail('Pilna poprawka idzie do prod.', 'Gałąź `flow/hotfix/…` otwiera pull request do `prod`; po wydaniu automat scala `prod` z powrotem do `dev`.');
+            }
+
+            const EXEMPT = ['release-please--', 'dependabot/', 'renovate/'];
+            if (['dev', 'prod', 'main'].includes(branch) || EXEMPT.some((p) => branch.startsWith(p))) {
+              return core.info(`'${branch}' zakłada narzędzie albo to gałąź główna: pomijam.`);
+            }
+
+            const PATTERN = [
+              'Wzorzec: `flow/<typ>/<numer>-<krótki-opis>`, np. `flow/feature/001-snooze-threads`.',
+              `Typy: ${TYPES.join(', ')}.`,
+              'Numer to numer istniejącego zgłoszenia, dopełniony zerami do trzech cyfr. Opis po angielsku, małymi literami, z myślnikami.',
+            ].join('\n\n');
+            const m = branch.match(new RegExp(`^flow/(${TYPES.join('|')})/(\\d{3,})-([a-z0-9]+(?:-[a-z0-9]+)*)$`));
+            if (!m) return fail(`Nazwa gałęzi '${branch}' nie pasuje do konwencji.`, PATTERN);
+            const [, type, number] = m;
+            const issueNumber = parseInt(number, 10);
+            if (issueNumber === 0) return fail('Numer zgłoszenia nie może być zerem.', PATTERN);
+
+            let issue;
+            try {
+              issue = (await github.rest.issues.get({ ...context.repo, issue_number: issueNumber })).data;
+            } catch (e) {
+              if (e.status === 404 || e.status === 410) {
+                return fail(`Zgłoszenie #${issueNumber} nie istnieje albo zostało usunięte.`, 'Załóż zgłoszenie przed gałęzią albo popraw numer w nazwie gałęzi.');
+              }
+              throw e;
+            }
+            if (issue.pull_request) return fail(`#${issueNumber} to pull request, nie zgłoszenie.`, 'Numery zgłoszeń i pull requestów są wspólne. Użyj numeru zgłoszenia.');
+
+            const TYPE_LABEL = {
+              feature: 'type: ✨ feature', bugfix: 'type: 🐛 bugfix', hotfix: 'type: 🐛 bugfix', refactor: 'type: ♻️ refactor',
+              perf: 'type: ⚡ perf', chore: 'type: 🔧 chore', docs: 'type: 📚 docs', security: 'type: 🔒 security',
+              spike: 'type: 🔍 spike', test: 'type: 🧪 test',
+            };
+            const names = issue.labels.map((l) => l.name || l);
+            core.summary.addHeading('✅ Nazwa gałęzi poprawna', 2).addRaw(`\`${branch}\` → \`${base}\`\n\nZgłoszenie [#${issueNumber}](${issue.html_url}): ${issue.title}\n`);
+            if (names.some((n) => n.startsWith('type: ')) && !names.includes(TYPE_LABEL[type])) {
+              core.warning(`Gałąź mówi '${type}', a zgłoszenie #${issueNumber} ma inną etykietę type:. Nie blokuje scalenia, ale sprawdź.`);
+            }
+            await core.summary.write();
+
+      - name: Title and type label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number };
+            const PREFIX = {
+              feature: ['✨ Feature', 'type: ✨ feature'], bugfix: ['🐛 Bugfix', 'type: 🐛 bugfix'],
+              hotfix: ['🚑 Hotfix', 'type: 🐛 bugfix'], refactor: ['♻️ Refactor', 'type: ♻️ refactor'],
+              perf: ['⚡ Perf', 'type: ⚡ perf'], chore: ['🔧 Chore', 'type: 🔧 chore'], docs: ['📚 Docs', 'type: 📚 docs'],
+              test: ['🧪 Test', 'type: 🧪 test'], security: ['🔒 Security', 'type: 🔒 security'], spike: ['🔍 Spike', 'type: 🔍 spike'],
+            };
+            if (pr.head.ref === 'dev' && pr.base.ref === 'prod') {
+              const title = '🚀 Release: dev → prod';
+              if (pr.title !== title) await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, title });
+              return;
+            }
+            const m = pr.head.ref.match(/^flow\/([a-z]+)\/(\d{3,})-/);
+            if (!m || !PREFIX[m[1]]) return core.info(`'${pr.head.ref}' to nie gałąź zadania: tytuł bez zmian.`);
+            const [, type, number] = m;
+            const [prefix, label] = PREFIX[type];
+            if (!/\[\d{3,}\]/.test(pr.title)) {
+              // Usuń przedrostek Conventional Commits („feat: …”), jeśli autor go wpisał
+              const text = pr.title.replace(/^[a-z]+(\([^)]*\))?!?:\s*/i, '');
+              const title = `${prefix}: [${number}] ${text}`.trim();
+              await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, title });
+              core.info(`Tytuł -> ${title}`);
+            }
+            if (!pr.labels.some((l) => l.name === label)) {
+              try { await github.rest.issues.addLabels({ ...ref, labels: [label] }); }
+              catch (e) { core.warning(`Etykieta ${label}: ${e.message}`); }
+            }
+
+      - name: Assignee, labels, milestone and linked issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const RELEASE = /^v(\d+)\.(\d+)\.(\d+)$/;
+            const pr = context.payload.pull_request;
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number };
+            const m = pr.head.ref.match(/^flow\/[a-z]+\/(\d{3,})-/);
+            let issue = null;
+            if (m) {
+              try { issue = (await github.rest.issues.get({ ...context.repo, issue_number: Number(m[1]) })).data; }
+              catch { issue = null; }
+              if (issue?.pull_request) issue = null;
+            }
+            if (!pr.assignees.length && pr.user.type === 'User') {
+              await github.rest.issues.addAssignees({ ...ref, assignees: [pr.user.login] });
+            }
+            const have = pr.labels.map((l) => l.name);
+            const copy = (issue?.labels ?? []).map((l) => l.name ?? l).filter((name) => /^(area|prio): /.test(name) && !have.includes(name));
+            if (copy.length) await github.rest.issues.addLabels({ ...ref, labels: copy });
+            if (!pr.milestone) {
+              const open = (x) => x && x.state === 'open' && RELEASE.test(x.title);
+              const version = (title) => RELEASE.exec(title).slice(1).map(Number);
+              let milestone = open(issue?.milestone) ? issue.milestone : null;
+              if (!milestone) {
+                const all = await github.paginate(github.rest.issues.listMilestones, { ...context.repo, state: 'open', per_page: 100 });
+                milestone = all.filter(open).sort((a, b) => {
+                  const [x, y] = [version(a.title), version(b.title)];
+                  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+                })[0];
+              }
+              if (milestone) await github.rest.issues.update({ ...ref, milestone: milestone.number });
+            }
+            const closes = (n) => new RegExp(`\\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\\s+#${n}\\b`, 'i');
+            if (issue && !closes(issue.number).test(pr.body ?? '')) {
+              const body = `${(pr.body ?? '').trimEnd()}\n\nCloses #${issue.number}`.trimStart();
+              await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, body });
+            }

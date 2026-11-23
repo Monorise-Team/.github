@@ -1,0 +1,218 @@
+name: Issue automation
+
+# Wspólny automat zgłoszeń organizacji (ADR-0086), wzorowany na repozytorium Aven. Działa w tym
+# repozytorium, a pozostałe wywołują go jedną linijką (workflow_call), np.:
+#
+#   on:
+#     issues:
+#       types: [opened, edited, reopened, closed]
+#   permissions:
+#     issues: write
+#     contents: read
+#   jobs:
+#     issue:
+#       uses: Monorise-Team/.github/.github/workflows/issue-automation.yml@main
+#       secrets: inherit
+#
+# 1. Triage (opened, edited): formularze nie umieją nadać etykiet z odpowiedzi, więc robi to automat:
+#    „Obszar” -> area: <wartość> (gdy taka etykieta istnieje w repozytorium), „Priorytet” -> prio: <wartość>,
+#    „Rodzaj” poprawia type: (Wydajność -> perf, Testy -> test). Z obszarem i priorytetem znika
+#    `meta: ❓ needs triage`. Na końcu tytuł dostaje typ i numer: „Problem” -> „🐛 Bugfix: [009] Problem”.
+#    Etykiety pól to polskie nazwy z formularzy (templates/ISSUE_TEMPLATE); zmiana nazwy pola wymaga zmiany tutaj.
+# 2. Tablica „Monorise” (opened, reopened -> 📥 Backlog, closed -> ✅ Done). Wymaga sekretu PROJECT_TOKEN
+#    (token classic z uprawnieniami project i repo); bez niego krok się pomija, a kartę dodaje formularz.
+# 3. Panel boczny (każde zdarzenie): autor jako osoba przypisana, typ zgłoszenia organizacji (Bug, Feature,
+#    Task), milestone najbliższego wydania (najniższe otwarte vX.Y.Z) i powiązania z pola „Zależności”
+#    (`Czeka na: #N` -> blokowane przez #N, `Część: #N` -> etap #N). Wszystko „najlepiej, jak się da”:
+#    błąd tutaj nie zatrzymuje reszty.
+
+on:
+  issues:
+    types: [opened, edited, reopened, closed]
+  workflow_call:
+    inputs:
+      project-owner:
+        description: Właściciel tablicy (organizacja)
+        type: string
+        default: Monorise-Team
+      project-number:
+        description: Numer tablicy
+        type: number
+        default: 3
+    secrets:
+      PROJECT_TOKEN:
+        required: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  issue:
+    name: Triage, board and sidebar
+    if: github.event.action != 'edited' || github.event.changes.title || github.event.changes.body
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Triage and title
+        if: github.event.action == 'opened' || github.event.action == 'edited'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const TRIAGE = 'meta: ❓ needs triage';
+            const PRIOS = ['P0-critical', 'P1-high', 'P2-medium', 'P3-low'];
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.issue.number };
+            const body = context.payload.issue.body || '';
+
+            // Formularze zapisują się jako „### Pole\n\nwartość”
+            const sections = {};
+            for (const chunk of body.split(/^### /m).slice(1)) {
+              const nl = chunk.indexOf('\n');
+              if (nl !== -1) sections[chunk.slice(0, nl).trim()] = chunk.slice(nl + 1).trim();
+            }
+            const values = (name) =>
+              (sections[name] || '').split(/[,\n]/).map((v) => v.trim()).filter((v) => v && v !== '_No response_');
+
+            const repoLabels = new Set(
+              (await github.paginate(github.rest.issues.listLabelsForRepo, { owner: ref.owner, repo: ref.repo, per_page: 100 }))
+                .map((label) => label.name),
+            );
+            const add = new Set();
+            const remove = new Set();
+
+            for (const area of values('Obszar')) {
+              if (repoLabels.has(`area: ${area}`)) add.add(`area: ${area}`);
+            }
+            const prio = values('Priorytet')[0];
+            if (PRIOS.includes(prio)) {
+              add.add(`prio: ${prio}`);
+              for (const p of PRIOS) if (p !== prio) remove.add(`prio: ${p}`);
+            }
+            const kind = values('Rodzaj')[0] || '';
+            if (/^Wydajno/.test(kind)) {
+              add.add('type: ⚡ perf');
+              remove.add('type: ♻️ refactor');
+            } else if (/^Testy/.test(kind)) {
+              add.add('type: 🧪 test');
+              remove.add('type: 🔧 chore');
+            }
+
+            const current = context.payload.issue.labels.map((l) => l.name);
+            const hasArea = [...add, ...current].some((l) => l.startsWith('area: '));
+            const hasPrio = [...add].some((l) => l.startsWith('prio: ')) || current.some((l) => l.startsWith('prio: '));
+            // Formularz dokumentacji (albo repozytorium bez obszarów) nie pyta o obszar
+            const asksForArea = 'Obszar' in sections;
+            if (hasPrio && (hasArea || !asksForArea)) remove.add(TRIAGE);
+
+            const toAdd = [...add].filter((l) => !current.includes(l) && repoLabels.has(l));
+            const toRemove = [...remove].filter((l) => current.includes(l));
+            if (toAdd.length) await github.rest.issues.addLabels({ ...ref, labels: toAdd });
+            for (const name of toRemove) await github.rest.issues.removeLabel({ ...ref, name });
+            core.info(`Etykiety: +${toAdd.join(', ') || '-'} / -${toRemove.join(', ') || '-'}`);
+
+            // Tytuł na końcu: typ mógł się właśnie zmienić (Wydajność -> perf, Testy -> test)
+            const PREFIX = {
+              'type: ✨ feature': '✨ Feature', 'type: 🐛 bugfix': '🐛 Bugfix', 'type: ♻️ refactor': '♻️ Refactor',
+              'type: ⚡ perf': '⚡ Perf', 'type: 🔧 chore': '🔧 Chore', 'type: 📚 docs': '📚 Docs',
+              'type: 🧪 test': '🧪 Test', 'type: 🔒 security': '🔒 Security', 'type: 🔍 spike': '🔍 Spike',
+            };
+            const title = context.payload.issue.title || '';
+            if (/\[\d{3,}\]/.test(title)) return core.info('Tytuł ma już numer.');
+            const final = new Set([...current, ...toAdd]);
+            for (const l of toRemove) final.delete(l);
+            const prefix = PREFIX[[...final].find((l) => l.startsWith('type: '))];
+            const padded = String(ref.issue_number).padStart(3, '0');
+            const newTitle = prefix ? `${prefix}: [${padded}] ${title}` : `[${padded}] ${title}`;
+            await github.rest.issues.update({ ...ref, title: newTitle.trim() });
+            core.info(`Tytuł -> ${newTitle}`);
+
+      - name: Board
+        if: github.event.action != 'edited'
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          OWNER: ${{ inputs.project-owner || 'Monorise-Team' }}
+          NUMBER: ${{ inputs.project-number || 3 }}
+          CONTENT_ID: ${{ github.event.issue.node_id }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Brak sekretu PROJECT_TOKEN: tablicę zostawiam formularzowi i automatom samej tablicy." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$ACTION" = "closed" ]; then COLUMN="✅ Done"; else COLUMN="📥 Backlog"; fi
+          # Kolumny szukamy po nazwie, więc identyfikatory tablicy nie są nigdzie wpisane na sztywno
+          JSON=$(gh api graphql -f owner="$OWNER" -F number="$NUMBER" -f query='
+            query($owner: String!, $number: Int!) {
+              organization(login: $owner) { projectV2(number: $number) {
+                id
+                field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } }
+              } }
+            }')
+          PROJECT_ID=$(echo "$JSON" | jq -r '.data.organization.projectV2.id')
+          FIELD_ID=$(echo "$JSON" | jq -r '.data.organization.projectV2.field.id')
+          OPTION_ID=$(echo "$JSON" | jq -r --arg column "$COLUMN" '.data.organization.projectV2.field.options[] | select(.name == $column) | .id')
+          if [ -z "$OPTION_ID" ]; then
+            echo "::warning::Tablica nie ma kolumny $COLUMN"
+            exit 0
+          fi
+          ITEM_ID=$(gh api graphql -f project="$PROJECT_ID" -f content="$CONTENT_ID" -f query='
+            mutation($project: ID!, $content: ID!) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $content}) { item { id } }
+            }' --jq '.data.addProjectV2ItemById.item.id')
+          gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$FIELD_ID" -f option="$OPTION_ID" -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+              updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item, fieldId: $field, value: {singleSelectOptionId: $option}}) {
+                projectV2Item { id }
+              }
+            }' > /dev/null
+          echo "Zgłoszenie #${{ github.event.issue.number }} -> $COLUMN" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sidebar
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const RELEASE = /^v(\d+)\.(\d+)\.(\d+)$/;
+            const issue = context.payload.issue;
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number };
+            const attempt = async (what, fn) => {
+              try { await fn(); } catch (error) { core.warning(`${what}: ${error.message}`); }
+            };
+
+            if (!issue.assignees?.length && issue.user?.type === 'User') {
+              await attempt('osoba przypisana', () => github.rest.issues.addAssignees({ ...ref, assignees: [issue.user.login] }));
+            }
+
+            // Typ zgłoszenia organizacji (Bug, Feature, Task), gdy organizacja ma typy
+            const labels = issue.labels.map((l) => l.name);
+            const type = labels.some((l) => /^type: .*(bugfix|security)$/.test(l))
+              ? 'Bug'
+              : labels.includes('type: ✨ feature') ? 'Feature' : 'Task';
+            if (!issue.type) await attempt('typ zgłoszenia', () => github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type }));
+
+            // Milestone najbliższego wydania; zamknięte jako „not planned” z niego wypada
+            if (context.payload.action === 'closed' && issue.state_reason === 'not_planned' && issue.milestone) {
+              await attempt('milestone', () => github.rest.issues.update({ ...ref, milestone: null }));
+            } else if (!issue.milestone && context.payload.action !== 'closed') {
+              const version = (title) => RELEASE.exec(title).slice(1).map(Number);
+              const open = (await github.paginate(github.rest.issues.listMilestones, { owner: ref.owner, repo: ref.repo, state: 'open', per_page: 100 }))
+                .filter((m) => RELEASE.test(m.title))
+                .sort((a, b) => { const [x, y] = [version(a.title), version(b.title)]; return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
+              if (open[0]) await attempt('milestone', () => github.rest.issues.update({ ...ref, milestone: open[0].number }));
+            }
+
+            // Powiązania z pola „Zależności”
+            const section = ((issue.body || '').split(/^### /m).find((chunk) => chunk.startsWith('Zależności')) || '');
+            for (const line of section.split('\n').slice(1)) {
+              const m = /^(Czeka na|Część):\s*#(\d+)/i.exec(line.trim());
+              if (!m || Number(m[2]) === issue.number) continue;
+              const other = Number(m[2]);
+              if (/^Czeka/i.test(m[1])) {
+                await attempt(`blokowane przez #${other}`, async () => {
+                  const blocking = (await github.rest.issues.get({ ...ref, issue_number: other })).data;
+                  await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', { ...ref, issue_id: blocking.id });
+                });
+              } else {
+                await attempt(`etap #${other}`, () =>
+                  github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...ref, issue_number: other, sub_issue_id: issue.id }));
+              }
+            }
