@@ -1,0 +1,29 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pytanie o to, jak coś działa: biblioteki `@monorise-team/*`, API, narzędzia albo proces. Najlepszą odpowiedź oznaczamy, żeby kolejna osoba znalazła ją od razu. Błąd zgłoś zgłoszeniem w repozytorium, a podatność prywatnie według `SECURITY.md`.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Pytanie
+      description: Czego dotyczy i co chcesz osiągnąć.
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Repozytorium albo biblioteka
+      placeholder: MonoriseShared, @monorise-team/sdk
+    validations:
+      required: false
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: Co już sprawdzone
+      description: Dokumentacja, kod, polecenia i ich wynik (bez tokenów i haseł).
+    validations:
+      required: false

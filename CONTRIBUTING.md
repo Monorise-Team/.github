@@ -136,6 +136,27 @@ Typy: `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `security`, `s
 - Milestone = wydanie (`v0.2.0`). Po wydaniu otwiera się następny.
 - Wszystkie części produktu mają jedną wersję, a wszystkie paczki `@monorise-team/*` też jedną.
 
+## 7. Dyskusje
+
+[Dyskusje organizacji](https://github.com/orgs/Monorise-Team/discussions) służą do rozmowy przed pracą i wokół niej. Są publiczne: bez sekretów, danych klientów i spraw firmowych.
+
+| Co masz | Gdzie |
+| --- | --- |
+| konkretną pracę do zrobienia (błąd, funkcja, utrzymanie) | zgłoszenie z formularza w repozytorium |
+| pytanie, jak coś działa | 🙏 Pytania i odpowiedzi (najlepszą odpowiedź oznaczamy) |
+| propozycję techniczną przed decyzją | 🏛️ Architektura (RFC): problem, opcje, rekomendacja; przyjętą decyzję zapisuje ADR w MonoriseDocumentation |
+| pomysł, który nie jest jeszcze zadaniem | 💡 Pomysły; gdy dojrzeje, powstaje zgłoszenie z odnośnikiem do dyskusji |
+| uwagę o pracy z agentami AI, automatach i procesie | 🤖 Agenci AI i proces |
+| podatność, którą da się wykorzystać | **nie dyskusja**: prywatnie według [SECURITY.md](SECURITY.md) |
+
+Sekcje kategorii:
+
+- **🏠 Monorise**: 📣 Ogłoszenia (wydania, zmiany procesu) i 🧭 Kierunek (plan prac); zakładają opiekunowie, komentować może każdy.
+- **🛠️ Technika**: 🙏 Pytania i odpowiedzi, 🏛️ Architektura (RFC), 🤖 Agenci AI i proces.
+- **👥 Społeczność**: 💡 Pomysły, 🙌 Pokazy, 🗳️ Ankiety, 💬 Rozmowy.
+
+Kategorie „Architektura (RFC)” i „Pytania i odpowiedzi” mają formularze w `.github/DISCUSSION_TEMPLATE/` (nazwa pliku = adres kategorii). Kategorie i sekcje zmienia się tylko w ustawieniach Discussions na GitHubie; opis tutaj aktualizujemy razem z nimi. Gdy dyskusja kończy się zgłoszeniem albo ADR-em, w dyskusji zostaje odnośnik, a dyskusja zostaje zamknięta jako rozstrzygnięta.
+
 ## Agenci AI i wspólne pliki
 
 Każde narzędzie AI (Claude, Gemini / Antigravity, ChatGPT / Codex, GitHub Copilot) czyta pliki z repozytorium, w którym pracuje. Żeby zasady się nie rozjeżdżały, jedno ich źródło żyje tutaj w `templates/agents/`, a skrypt `scripts/repo-setup.mjs` i codzienny workflow `.github/workflows/sync-shared.yml` rozsyłają je do każdego repozytorium organizacji.

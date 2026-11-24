@@ -92,4 +92,8 @@
   <a href="https://github.com/orgs/Monorise-Team/people" target="_blank"><img src="./assets/btn-github.svg" height="42" alt="Zespół" /></a>
 </p>
 
+<p align="center">
+  <sub>💬 Pytania, pomysły i plany prac: <a href="https://github.com/orgs/Monorise-Team/discussions">dyskusje Monorise</a></sub>
+</p>
+
 </div>

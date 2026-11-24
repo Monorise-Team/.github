@@ -1,0 +1,49 @@
+title: "RFC: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propozycja techniczna **przed** decyzją. Dyskusja zbiera argumenty, a przyjętą decyzję zapisuje potem ADR w dokumentacji (zgłoszenie i pull request). Dyskusje są publiczne: bez sekretów, danych klientów i spraw firmowych.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Co nie działa albo czego brakuje i kogo to dotyczy. Najlepiej na przykładzie (firma Acme, pracownica Anna).
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Kontekst
+      description: Powiązane ADR-y, zgłoszenia, biblioteki i ograniczenia, które trzeba uszanować.
+    validations:
+      required: false
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Opcje
+      description: Co najmniej dwie realne opcje z zaletami, wadami i kosztem.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Rekomendacja
+      description: Którą opcję polecasz i dlaczego.
+    validations:
+      required: true
+
+  - type: textarea
+    id: questions
+    attributes:
+      label: Otwarte pytania
+      description: Na co potrzebna jest odpowiedź, zanim zapadnie decyzja.
+    validations:
+      required: false
