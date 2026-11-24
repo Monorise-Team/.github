@@ -60,7 +60,7 @@ Czeka na: #12, MonoriseCore#13, https://github.com/Monorise-Team/AvenMail/issues
 Część: Monorise-Team/MonoriseShared#4
 ```
 
-Gdy czegoś brakuje (w starszych zgłoszeniach, po założeniu zgłoszenia ręcznie bez formularza albo żeby powiązać gałąź utworzoną przez Relay Bridge zamiast `gh issue develop`), uruchom w `Monorise-Team/.github`:
+Gdy czegoś brakuje (w starszych zgłoszeniach albo po założeniu zgłoszenia ręcznie bez formularza), uruchom w `Monorise-Team/.github`:
 
 ```bash
 # Podgląd pełnego uzupełnienia (backfill) wszystkich zgłoszeń i pull requestów repozytorium:
@@ -69,13 +69,21 @@ node scripts/repo-setup.mjs meta MonoriseShared --dry-run
 # Zapis pełnego uzupełnienia:
 node scripts/repo-setup.mjs meta MonoriseShared
 
-# Jedno zgłoszenie z ręcznymi wartościami, relacją i powiązaniem istniejącej gałęzi:
+# Jedno zgłoszenie z ręcznymi wartościami i relacją:
 node scripts/repo-setup.mjs meta MonoriseShared --issue 18 \
   --priority High --effort Medium --start 2026-11-24 --target 2026-11-26 \
-  --blocked-by MonoriseCore#13 --parent #4 --branch flow/chore/018-przyklad
+  --blocked-by MonoriseCore#13 --parent #4
 ```
 
-Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`/`prio:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola, dopisać relacje (`--blocked-by`, `--parent`) i powiązać istniejącą gałąź w sekcji „Development” (`--branch`, best-effort).
+Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`/`prio:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola i dopisać relacje (`--blocked-by`, `--parent`).
+
+**Gałąź w sekcji „Development”:** GitHub nie pozwala podpiąć pod zgłoszenie już istniejącej gałęzi przez API (`createLinkedBranch` tworzy wyłącznie nową gałąź). Żeby gałąź była widoczna w „Development”, załóż ją najpierw ze zgłoszenia:
+
+```bash
+gh issue develop <n> --base <base> --name flow/<typ>/<nnn>-<opis>
+```
+
+Przy delegowaniu zadania przez Relay Bridge utwórz lokalny `git worktree` tej gałęzi i przekaż go do zlecenia z `isolation: "in_place"`.
 
 ## 2. Etykiety
 

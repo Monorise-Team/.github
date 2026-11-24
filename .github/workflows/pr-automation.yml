@@ -189,6 +189,7 @@ jobs:
 
             // Upewnij się, że zamykane zgłoszenie ma ustawione Start date (best-effort).
             const summary = [];
+            const ISSUE_FIELDS_HEADERS = { 'GraphQL-Features': 'issue_fields' };
             try {
               const meta = await import(pathToFileURL(path.resolve('.monorise-shared/scripts/lib/issue-meta.mjs')).href);
               const targets = new Map();
@@ -196,6 +197,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 number: pr.number,
+                headers: ISSUE_FIELDS_HEADERS,
               });
               for (const node of prData?.repository?.pullRequest?.closingIssuesReferences?.nodes || []) {
                 if (!node?.id || !node?.repository?.owner?.login || !node?.repository?.name) continue;
@@ -217,6 +219,7 @@ jobs:
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     number: issue.number,
+                    headers: ISSUE_FIELDS_HEADERS,
                   });
                   const node = issueData?.repository?.issue;
                   if (node?.id) {
@@ -229,7 +232,10 @@ jobs:
               }
 
               if (targets.size) {
-                const orgData = await github.graphql(meta.ORG_ISSUE_FIELDS_QUERY, { org: context.repo.owner });
+                const orgData = await github.graphql(meta.ORG_ISSUE_FIELDS_QUERY, {
+                  org: context.repo.owner,
+                  headers: ISSUE_FIELDS_HEADERS,
+                });
                 const orgFields = meta.indexOrgIssueFields(orgData?.organization);
                 for (const targetIssue of targets.values()) {
                   const label = meta.formatIssueRef(
@@ -258,6 +264,7 @@ jobs:
                     await github.graphql(meta.SET_ISSUE_FIELD_VALUE_MUTATION, {
                       issueId: targetIssue.id,
                       issueFields: inputs,
+                      headers: ISSUE_FIELDS_HEADERS,
                     });
                     summary.push(`- ${label}: ustawiono Start date \`${startDate}\``);
                   } catch (error) {

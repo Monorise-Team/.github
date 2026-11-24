@@ -679,33 +679,6 @@ export const ADD_SUB_ISSUE_MUTATION = `
   }
 `;
 
-export const REPO_BRANCH_OID_QUERY = `
-  query($owner: String!, $repo: String!, $ref: String!) {
-    repository(owner: $owner, name: $repo) {
-      id
-      ref(qualifiedName: $ref) {
-        name
-        target {
-          oid
-        }
-      }
-    }
-  }
-`;
-
-export const CREATE_LINKED_BRANCH_MUTATION = `
-  mutation($issueId: ID!, $name: String!, $oid: GitObjectID!, $repositoryId: ID!) {
-    createLinkedBranch(input: { issueId: $issueId, name: $name, oid: $oid, repositoryId: $repositoryId }) {
-      linkedBranch {
-        id
-        ref {
-          name
-        }
-      }
-    }
-  }
-`;
-
 export const PR_CLOSING_ISSUES_QUERY = `
   query($owner: String!, $repo: String!, $number: Int!) {
     repository(owner: $owner, name: $repo) {

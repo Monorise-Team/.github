@@ -77,7 +77,7 @@ node scripts/repo-setup.mjs labels <Repo> [--dry-run]
 node scripts/repo-setup.mjs protect <Repo> [--dry-run]
 node scripts/repo-setup.mjs dispatch [<Repo>…]                             # synchronizacja od razu
 node scripts/repo-setup.mjs audit [--markdown <plik>]                      # brakujące wpisy i rozjechane ustawienia
-node scripts/repo-setup.mjs meta <Repo> [--issue <n>] [--dry-run]          # metadane zgłoszeń i PR (pola, relacje, gałąź)
+node scripts/repo-setup.mjs meta <Repo> [--issue <n>] [--dry-run]          # metadane zgłoszeń i PR (pola, relacje)
 node scripts/generate-assets.mjs
 ```
 

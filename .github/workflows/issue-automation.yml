@@ -176,6 +176,7 @@ jobs:
           echo "Zgłoszenie #${{ github.event.issue.number }} -> $COLUMN" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout shared metadata rules
+        continue-on-error: true
         uses: actions/checkout@v5
         with:
           repository: Monorise-Team/.github
@@ -190,7 +191,8 @@ jobs:
           script: |
             const path = require('node:path');
             const { pathToFileURL } = require('node:url');
-            const meta = await import(pathToFileURL(path.resolve('.monorise-shared/scripts/lib/issue-meta.mjs')).href);
+            const RELEASE = /^v(\d+)\.(\d+)\.(\d+)$/;
+            const ISSUE_FIELDS_HEADERS = { 'GraphQL-Features': 'issue_fields' };
 
             const issue = context.payload.issue;
             const action = context.payload.action;
@@ -206,6 +208,14 @@ jobs:
                 return false;
               }
             };
+
+            let meta = null;
+            try {
+              meta = await import(pathToFileURL(path.resolve('.monorise-shared/scripts/lib/issue-meta.mjs')).href);
+            } catch (error) {
+              core.warning(`moduł issue-meta.mjs niedostępny: ${error.message}`);
+              summary.push(`- ⚠️ Moduł \`issue-meta.mjs\` niedostępny — pominięto pola zgłoszenia i relacje między repozytoriami (${error.message})`);
+            }
 
             if (!issue.assignees?.length && issue.user?.type === 'User') {
               if (await attempt('osoba przypisana', () => github.rest.issues.addAssignees({ ...ref, assignees: [issue.user.login] }))) {
@@ -223,7 +233,11 @@ jobs:
             }
 
             // Typ zgłoszenia organizacji (Bug, Feature, Task), gdy organizacja ma typy
-            const type = meta.resolveIssueType(labels);
+            const type = meta
+              ? meta.resolveIssueType(labels)
+              : labels.some((l) => /^type: .*(bugfix|security)$/.test(l))
+                ? 'Bug'
+                : labels.includes('type: ✨ feature') ? 'Feature' : 'Task';
             if (!issue.type) {
               if (await attempt('typ zgłoszenia', () => github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type }))) {
                 summary.push(`- Typ zgłoszenia: \`${type}\``);
@@ -237,7 +251,14 @@ jobs:
               }
             } else if (!issue.milestone && action !== 'closed') {
               const open = await github.paginate(github.rest.issues.listMilestones, { owner: ref.owner, repo: ref.repo, state: 'open', per_page: 100 });
-              const nearest = meta.findNearestOpenMilestone(open);
+              const nearest = meta
+                ? meta.findNearestOpenMilestone(open)
+                : open
+                    .filter((m) => RELEASE.test(m.title))
+                    .sort((a, b) => {
+                      const [x, y] = [RELEASE.exec(a.title).slice(1).map(Number), RELEASE.exec(b.title).slice(1).map(Number)];
+                      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+                    })[0];
               if (nearest) {
                 if (await attempt('milestone', () => github.rest.issues.update({ ...ref, milestone: nearest.number }))) {
                   summary.push(`- Milestone: \`${nearest.title}\``);
@@ -246,127 +267,134 @@ jobs:
             }
 
             // Pola zgłoszeń organizacji (Priority, Effort, Start date, Target date)
-            await attempt('pola zgłoszenia', async () => {
-              const orgData = await github.graphql(meta.ORG_ISSUE_FIELDS_QUERY, { org: ref.owner });
-              const orgFields = meta.indexOrgIssueFields(orgData?.organization);
-              const issueData = await github.graphql(meta.ISSUE_FIELD_VALUES_QUERY, {
-                owner: ref.owner,
-                repo: ref.repo,
-                number: ref.issue_number,
-              });
-              const issueNode = issueData?.repository?.issue;
-              const currentFields = meta.extractCurrentFieldValues(issueNode?.issueFieldValues?.nodes || []);
-
-              const { updates } = meta.planIssueFieldUpdates({
-                body: issue.body || '',
-                labels,
-                state: action === 'closed' ? 'CLOSED' : 'OPEN',
-                createdAt: issue.created_at,
-                closedAt: issue.closed_at,
-                currentFields,
-                overwriteFromSource: action === 'edited',
-                onlyTargetOnClose: action === 'closed',
-              });
-              const { inputs, applied, skipped } = meta.buildSetIssueFieldsInput(updates, orgFields);
-              for (const item of skipped) {
-                core.warning(`pole zgłoszenia: pominięto ${item}`);
-                summary.push(`- Pominięto pole: ${item}`);
-              }
-              if (inputs.length) {
-                await github.graphql(meta.SET_ISSUE_FIELD_VALUE_MUTATION, {
-                  issueId: issueNode?.id || issue.node_id,
-                  issueFields: inputs,
+            if (meta) {
+              await attempt('pola zgłoszenia', async () => {
+                const orgData = await github.graphql(meta.ORG_ISSUE_FIELDS_QUERY, {
+                  org: ref.owner,
+                  headers: ISSUE_FIELDS_HEADERS,
                 });
-                summary.push(`- Pola zgłoszenia: ${applied.map((a) => `\`${a}\``).join(', ')}`);
-              } else {
-                summary.push('- Pola zgłoszenia: bez zmian (już uzupełnione lub brak źródła)');
-              }
-            });
+                const orgFields = meta.indexOrgIssueFields(orgData?.organization);
+                const issueData = await github.graphql(meta.ISSUE_FIELD_VALUES_QUERY, {
+                  owner: ref.owner,
+                  repo: ref.repo,
+                  number: ref.issue_number,
+                  headers: ISSUE_FIELDS_HEADERS,
+                });
+                const issueNode = issueData?.repository?.issue;
+                const currentFields = meta.extractCurrentFieldValues(issueNode?.issueFieldValues?.nodes || []);
 
-            // Powiązania z pola „Zależności” (także między repozytoriami) — tylko na opened, edited, reopened
-            if (action !== 'closed') {
-              const relations = meta.parseRelations(issue.body || '', {
-                defaultOwner: ref.owner,
-                defaultRepo: ref.repo,
-                selfNumber: issue.number,
+                const { updates } = meta.planIssueFieldUpdates({
+                  body: issue.body || '',
+                  labels,
+                  state: action === 'closed' ? 'CLOSED' : 'OPEN',
+                  createdAt: issue.created_at,
+                  closedAt: issue.closed_at,
+                  currentFields,
+                  overwriteFromSource: action === 'edited',
+                  onlyTargetOnClose: action === 'closed',
+                });
+                const { inputs, applied, skipped } = meta.buildSetIssueFieldsInput(updates, orgFields);
+                for (const item of skipped) {
+                  core.warning(`pole zgłoszenia: pominięto ${item}`);
+                  summary.push(`- Pominięto pole: ${item}`);
+                }
+                if (inputs.length) {
+                  await github.graphql(meta.SET_ISSUE_FIELD_VALUE_MUTATION, {
+                    issueId: issueNode?.id || issue.node_id,
+                    issueFields: inputs,
+                    headers: ISSUE_FIELDS_HEADERS,
+                  });
+                  summary.push(`- Pola zgłoszenia: ${applied.map((a) => `\`${a}\``).join(', ')}`);
+                } else {
+                  summary.push('- Pola zgłoszenia: bez zmian (już uzupełnione lub brak źródła)');
+                }
               });
-              if (relations.blockedBy.length || relations.parents.length) {
-                let existingBlocked = new Set();
-                let existingParentKey = null;
-                try {
-                  const relData = await github.graphql(meta.ISSUE_RELATIONS_QUERY, {
-                    owner: ref.owner,
-                    repo: ref.repo,
-                    number: ref.issue_number,
-                  });
-                  const relIssue = relData?.repository?.issue;
-                  existingBlocked = new Set(
-                    (relIssue?.blockedBy?.nodes || [])
-                      .filter((n) => n?.number && n?.repository?.name && n?.repository?.owner?.login)
-                      .map((n) => meta.issueRefKey({ owner: n.repository.owner.login, repo: n.repository.name, number: n.number })),
-                  );
-                  if (relIssue?.parent?.number && relIssue?.parent?.repository?.name && relIssue?.parent?.repository?.owner?.login) {
-                    existingParentKey = meta.issueRefKey({
-                      owner: relIssue.parent.repository.owner.login,
-                      repo: relIssue.parent.repository.name,
-                      number: relIssue.parent.number,
+
+              // Powiązania z pola „Zależności” (także między repozytoriami) — tylko na opened, edited, reopened
+              if (action !== 'closed') {
+                const relations = meta.parseRelations(issue.body || '', {
+                  defaultOwner: ref.owner,
+                  defaultRepo: ref.repo,
+                  selfNumber: issue.number,
+                });
+                if (relations.blockedBy.length || relations.parents.length) {
+                  let existingBlocked = new Set();
+                  let existingParentKey = null;
+                  try {
+                    const relData = await github.graphql(meta.ISSUE_RELATIONS_QUERY, {
+                      owner: ref.owner,
+                      repo: ref.repo,
+                      number: ref.issue_number,
                     });
-                  }
-                } catch (error) {
-                  core.warning(`odczyt istniejących relacji: ${error.message}`);
-                }
-
-                const resolveNodeId = async (targetRef) => {
-                  const res = await github.graphql(meta.ISSUE_NODE_ID_QUERY, {
-                    owner: targetRef.owner,
-                    repo: targetRef.repo,
-                    number: targetRef.number,
-                  });
-                  return res?.repository?.issue?.id || null;
-                };
-
-                for (const targetRef of relations.blockedBy) {
-                  const label = meta.formatIssueRef(targetRef, { defaultOwner: ref.owner, defaultRepo: ref.repo });
-                  if (existingBlocked.has(meta.issueRefKey(targetRef))) {
-                    summary.push(`- Pominięto relację blokowane przez \`${label}\` (już istnieje)`);
-                    continue;
-                  }
-                  const ok = await attempt(`blokowane przez ${label}`, async () => {
-                    const blockingIssueId = await resolveNodeId(targetRef);
-                    if (!blockingIssueId) throw new Error('nie znaleziono zgłoszenia albo brak dostępu');
-                    try {
-                      await github.graphql(meta.ADD_BLOCKED_BY_MUTATION, {
-                        issueId: issue.node_id,
-                        blockingIssueId,
+                    const relIssue = relData?.repository?.issue;
+                    existingBlocked = new Set(
+                      (relIssue?.blockedBy?.nodes || [])
+                        .filter((n) => n?.number && n?.repository?.name && n?.repository?.owner?.login)
+                        .map((n) => meta.issueRefKey({ owner: n.repository.owner.login, repo: n.repository.name, number: n.number })),
+                    );
+                    if (relIssue?.parent?.number && relIssue?.parent?.repository?.name && relIssue?.parent?.repository?.owner?.login) {
+                      existingParentKey = meta.issueRefKey({
+                        owner: relIssue.parent.repository.owner.login,
+                        repo: relIssue.parent.repository.name,
+                        number: relIssue.parent.number,
                       });
-                    } catch (error) {
-                      if (/already|duplicate|exists/i.test(error.message || '')) return;
-                      throw error;
                     }
-                  });
-                  if (ok) summary.push(`- Relacja: blokowane przez \`${label}\``);
-                }
-
-                for (const targetRef of relations.parents) {
-                  const label = meta.formatIssueRef(targetRef, { defaultOwner: ref.owner, defaultRepo: ref.repo });
-                  if (existingParentKey === meta.issueRefKey(targetRef)) {
-                    summary.push(`- Pominięto relację etap \`${label}\` (już istnieje)`);
-                    continue;
+                  } catch (error) {
+                    core.warning(`odczyt istniejących relacji: ${error.message}`);
                   }
-                  const ok = await attempt(`etap ${label}`, async () => {
-                    const parentId = await resolveNodeId(targetRef);
-                    if (!parentId) throw new Error('nie znaleziono zgłoszenia albo brak dostępu');
-                    try {
-                      await github.graphql(meta.ADD_SUB_ISSUE_MUTATION, {
-                        parentId,
-                        subIssueId: issue.node_id,
-                      });
-                    } catch (error) {
-                      if (/already|duplicate|exists/i.test(error.message || '')) return;
-                      throw error;
+
+                  const resolveNodeId = async (targetRef) => {
+                    const res = await github.graphql(meta.ISSUE_NODE_ID_QUERY, {
+                      owner: targetRef.owner,
+                      repo: targetRef.repo,
+                      number: targetRef.number,
+                    });
+                    return res?.repository?.issue?.id || null;
+                  };
+
+                  for (const targetRef of relations.blockedBy) {
+                    const label = meta.formatIssueRef(targetRef, { defaultOwner: ref.owner, defaultRepo: ref.repo });
+                    if (existingBlocked.has(meta.issueRefKey(targetRef))) {
+                      summary.push(`- Pominięto relację blokowane przez \`${label}\` (już istnieje)`);
+                      continue;
                     }
-                  });
-                  if (ok) summary.push(`- Relacja: etap \`${label}\``);
+                    const ok = await attempt(`blokowane przez ${label}`, async () => {
+                      const blockingIssueId = await resolveNodeId(targetRef);
+                      if (!blockingIssueId) throw new Error('nie znaleziono zgłoszenia albo brak dostępu');
+                      try {
+                        await github.graphql(meta.ADD_BLOCKED_BY_MUTATION, {
+                          issueId: issue.node_id,
+                          blockingIssueId,
+                        });
+                      } catch (error) {
+                        if (/already|duplicate|exists/i.test(error.message || '')) return;
+                        throw error;
+                      }
+                    });
+                    if (ok) summary.push(`- Relacja: blokowane przez \`${label}\``);
+                  }
+
+                  for (const targetRef of relations.parents) {
+                    const label = meta.formatIssueRef(targetRef, { defaultOwner: ref.owner, defaultRepo: ref.repo });
+                    if (existingParentKey === meta.issueRefKey(targetRef)) {
+                      summary.push(`- Pominięto relację etap \`${label}\` (już istnieje)`);
+                      continue;
+                    }
+                    const ok = await attempt(`etap ${label}`, async () => {
+                      const parentId = await resolveNodeId(targetRef);
+                      if (!parentId) throw new Error('nie znaleziono zgłoszenia albo brak dostępu');
+                      try {
+                        await github.graphql(meta.ADD_SUB_ISSUE_MUTATION, {
+                          parentId,
+                          subIssueId: issue.node_id,
+                        });
+                      } catch (error) {
+                        if (/already|duplicate|exists/i.test(error.message || '')) return;
+                        throw error;
+                      }
+                    });
+                    if (ok) summary.push(`- Relacja: etap \`${label}\``);
+                  }
                 }
               }
             }

@@ -196,7 +196,7 @@ jobs:
             if (summaryFile) appendFileSync(summaryFile, `${line}\n`);
           };
           const gql = (query, variables) => {
-            const out = execFileSync("gh", ["api", "graphql", "--input", "-"], {
+            const out = execFileSync("gh", ["api", "graphql", "-H", "GraphQL-Features: issue_fields", "--input", "-"], {
               encoding: "utf8",
               input: JSON.stringify({ query, variables }),
               stdio: ["pipe", "pipe", "pipe"],

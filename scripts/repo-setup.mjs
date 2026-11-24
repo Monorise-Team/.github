@@ -31,10 +31,9 @@
  *       repozytoria, rozbieżności About, brak .github/workflows/sync-shared.yml); kończy się błędem przy uwagach
  *   node scripts/repo-setup.mjs meta <Repo> [--issue <n>] [--dry-run] [--start YYYY-MM-DD] [--target YYYY-MM-DD]
  *       [--priority Urgent|High|Medium|Low] [--effort High|Medium|Low] [--blocked-by <ref>] [--parent <ref>]
- *       [--branch <nazwa>]
  *       uzupełnia metadane zgłoszeń i pull requestów (typ, Priority, Effort, Start/Target date, milestone,
  *       relacje z „Zależności”, etykiety i osobę przypisaną PR); bez --issue robi pełny backfill repozytorium,
- *       z --issue działa na jednym zgłoszeniu i pozwala ręcznie podać pola, relacje oraz gałąź (--branch)
+ *       z --issue działa na jednym zgłoszeniu i pozwala ręcznie podać pola oraz relacje
  *
  * Polecenia odwołujące się do GitHuba wymagają zalogowanego `gh` (dla labels/protect/about z uprawnieniem admina).
  */
@@ -56,10 +55,8 @@ import { fileURLToPath } from "node:url";
 import {
   ADD_BLOCKED_BY_MUTATION,
   ADD_SUB_ISSUE_MUTATION,
-  CREATE_LINKED_BRANCH_MUTATION,
   ISSUE_NODE_ID_QUERY,
   ORG_ISSUE_FIELDS_QUERY,
-  REPO_BRANCH_OID_QUERY,
   SET_ISSUE_FIELD_VALUE_MUTATION,
   VALID_EFFORTS,
   VALID_PRIORITIES,
@@ -778,7 +775,7 @@ function audit({ markdownPath }) {
 // ── Metadane zgłoszeń i pull requestów ──────────────────────────────────────
 
 function ghGraphql(query, variables = {}, { allowErrors = false } = {}) {
-  const res = ghJson(["api", "graphql", "--input", "-"], {
+  const res = ghJson(["api", "graphql", "-H", "GraphQL-Features: issue_fields", "--input", "-"], {
     input: JSON.stringify({ query, variables }),
   });
   if (!allowErrors && res?.errors?.length) {
@@ -855,13 +852,6 @@ const ISSUE_META_FRAGMENT = `
       name
       owner {
         login
-      }
-    }
-  }
-  linkedBranches(first: 20) {
-    nodes {
-      ref {
-        name
       }
     }
   }
@@ -1052,7 +1042,6 @@ function meta(
     effort = null,
     blockedByRefs = [],
     parentRef = null,
-    branch = null,
   } = {},
 ) {
   settingsOf(repo);
@@ -1109,7 +1098,7 @@ function meta(
     ...(effort ? { effort } : {}),
   };
 
-  const processIssue = (issue, { extraBlockedBy = [], extraParents = [], linkBranch = null } = {}) => {
+  const processIssue = (issue, { extraBlockedBy = [], extraParents = [] } = {}) => {
     stats.issuesChecked += 1;
     let issueTouched = false;
     const tag = `${repo}#${issue.number}`;
@@ -1271,42 +1260,6 @@ function meta(
       }
     }
 
-    // 6. Gałąź rozwojowa (--branch, tylko z --issue, best-effort)
-    if (linkBranch) {
-      const linkedNames = new Set((issue.linkedBranches?.nodes || []).map((n) => n?.ref?.name).filter(Boolean));
-      if (linkedNames.has(linkBranch)) {
-        console.log(`${tag}: gałąź ${linkBranch} jest już powiązana`);
-      } else {
-        const refData = ghGraphql(
-          REPO_BRANCH_OID_QUERY,
-          { owner: ORG, repo, ref: `refs/heads/${linkBranch}` },
-          { allowErrors: true },
-        )?.data?.repository;
-        const oid = refData?.ref?.target?.oid ?? null;
-        if (!oid) {
-          noteWarn(`gałąź ${linkBranch} nie istnieje w ${ORG}/${repo} — nie tworzę nowej gałęzi`);
-        } else {
-          noteChange(`gałąź -> ${linkBranch}`);
-          if (!dryRun) {
-            try {
-              const created = ghGraphql(CREATE_LINKED_BRANCH_MUTATION, {
-                issueId: issue.id,
-                name: linkBranch,
-                oid,
-                repositoryId: refData.id || repoContext.id,
-              });
-              const createdName = created?.data?.createLinkedBranch?.linkedBranch?.ref?.name;
-              if (createdName && createdName !== linkBranch) {
-                noteWarn(`GitHub powiązał gałąź pod inną nazwą: ${createdName}`);
-              }
-            } catch (error) {
-              noteWarn(`nie udało się powiązać gałęzi ${linkBranch}: ${error.message}`);
-            }
-          }
-        }
-      }
-    }
-
     if (issueTouched) stats.issuesChanged += 1;
   };
 
@@ -1323,7 +1276,6 @@ function meta(
     processIssue(issue, {
       extraBlockedBy: blockedByRefs,
       extraParents: parentRef ? [parentRef] : [],
-      linkBranch: branch,
     });
   } else {
     const allIssues = fetchAllRepoIssues(repo);
@@ -1429,7 +1381,6 @@ const VALUE_OPTIONS = new Set([
   "--effort",
   "--blocked-by",
   "--parent",
-  "--branch",
 ]);
 const REPEATABLE_OPTIONS = new Set(["--blocked-by"]);
 
@@ -1483,7 +1434,7 @@ const usage = [
   "  audit [--markdown <plik>]",
   "  meta <Repo> [--issue <n>] [--dry-run] [--start YYYY-MM-DD] [--target YYYY-MM-DD]",
   "       [--priority Urgent|High|Medium|Low] [--effort High|Medium|Low]",
-  "       [--blocked-by <ref>] [--parent <ref>] [--branch <nazwa>]",
+  "       [--blocked-by <ref>] [--parent <ref>]",
 ].join("\n");
 
 if (command === "forms" && repo && dir) {
@@ -1519,15 +1470,14 @@ if (command === "forms" && repo && dir) {
   const target = options.get("target") ?? null;
   const priority = options.get("priority") ?? null;
   const effort = options.get("effort") ?? null;
-  const branch = options.get("branch") ?? null;
   const rawBlockedBy = multiOptions.get("blocked-by") ?? [];
   const rawParent = options.get("parent") ?? null;
 
   const hasSingleIssueFlag = Boolean(
-    start || target || priority || effort || branch || rawBlockedBy.length || rawParent,
+    start || target || priority || effort || rawBlockedBy.length || rawParent,
   );
   if (hasSingleIssueFlag && issueNumber === null) {
-    console.error("Opcje --start, --target, --priority, --effort, --blocked-by, --parent i --branch wymagają --issue <n>.");
+    console.error("Opcje --start, --target, --priority, --effort, --blocked-by i --parent wymagają --issue <n>.");
     process.exit(2);
   }
   if (start && !isValidYmd(start)) {
@@ -1574,7 +1524,6 @@ if (command === "forms" && repo && dir) {
       effort,
       blockedByRefs,
       parentRef,
-      branch,
     }),
   );
 } else {
