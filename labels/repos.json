@@ -1,8 +1,16 @@
 {
-  "$comment": "Ustawienia procesu dla każdego repozytorium (scripts/repo-setup.mjs). kind: production = dev, prod i flow/*; main = main i flow/*. checks: zadania CI wymagane w pull requestach (nazwy zadań, jak pokazuje je GitHub). public: reguły ochrony gałęzi działają na planie Free tylko w repozytoriach publicznych.",
+  "$comment": "Ustawienia procesu dla każdego repozytorium (scripts/repo-setup.mjs). kind: production = dev, prod i flow/*; main = main i flow/*. checks: zadania CI wymagane w pull requestach (nazwy zadań, jak pokazuje je GitHub). public: reguły ochrony gałęzi działają na planie Free tylko w repozytoriach publicznych. description, homepage, topics: dane sekcji „About” na GitHubie (polecenie about i audit). planned: repozytorium zaplanowane, jeszcze nie istnieje (audit i dispatch je pomijają).",
   ".github": {
     "kind": "main",
     "public": true,
+    "description": "Wspólny proces organizacji Monorise: formularze, workflow, etykiety i zasady dla agentów AI",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "github-actions",
+      "issue-templates",
+      "ai-agents"
+    ],
     "areas": [],
     "checks": [
       "check"
@@ -11,6 +19,15 @@
   "MonoriseDocumentation": {
     "kind": "main",
     "public": false,
+    "description": "Dokumentacja architektury ekosystemu Monorise: decyzje (ADR), modele danych, standardy i plan budowy",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "architecture",
+      "adr",
+      "documentation",
+      "openapi"
+    ],
     "areas": [
       {
         "name": "adr",
@@ -38,6 +55,15 @@
   "MonoriseWebsite": {
     "kind": "production",
     "public": true,
+    "description": "Strona wizytówka monorise.studio (Next.js, PL i EN)",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "website",
+      "nextjs",
+      "tailwindcss",
+      "static-site"
+    ],
     "areas": [
       {
         "name": "website",
@@ -63,6 +89,18 @@
   "MonoriseShared": {
     "kind": "production",
     "public": true,
+    "description": "Wspólne biblioteki Monorise @monorise-team/*: wygląd, logowanie, uprawnienia i narzędzia dla produktów",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "typescript",
+      "react",
+      "design-system",
+      "oauth",
+      "permissions",
+      "pnpm",
+      "turborepo"
+    ],
     "areas": [
       {
         "name": "tokens",
@@ -100,6 +138,18 @@
   "AvenMail": {
     "kind": "production",
     "public": true,
+    "description": "AvenMail: klient poczty Monorise (IMAP, SMTP) w przeglądarce, na komputerach i telefonach",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "email-client",
+      "imap",
+      "smtp",
+      "nextjs",
+      "tauri",
+      "expo",
+      "prisma"
+    ],
     "areas": [
       {
         "name": "web",
@@ -141,6 +191,18 @@
   "MonoriseCore": {
     "kind": "production",
     "public": true,
+    "description": "MonoriseCore: logowanie, firmy, pracownicy, role i uprawnienia platformy Monorise",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "nextjs",
+      "fastify",
+      "prisma",
+      "postgresql",
+      "oauth2",
+      "better-auth",
+      "row-level-security"
+    ],
     "areas": [
       {
         "name": "auth",
@@ -180,6 +242,7 @@
     ]
   },
   "TimoTime": {
+    "planned": true,
     "kind": "production",
     "public": true,
     "areas": [

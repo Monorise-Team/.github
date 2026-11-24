@@ -21,13 +21,20 @@ jobs:
         run: for f in scripts/*.mjs; do node --check "$f"; done
       - name: Issue forms match the templates
         run: node scripts/repo-setup.mjs forms .github .github --check
+      - name: Agent files match the templates
+        run: node scripts/repo-setup.mjs agents .github . --check
+      - name: Agent templates and files use Prettier style
+        run: npx --yes prettier@3 --check --print-width 120 templates/agents/* AGENTS.md CLAUDE.md GEMINI.md .github/copilot-instructions.md
+      - name: Agent templates and files pass markdownlint
+        run: npx --yes markdownlint-cli2@0.24.0
       - name: Workflows and forms are valid YAML
         run: |
           python3 -m pip install --quiet pyyaml
           python3 - <<'PY2'
           import glob, sys, yaml
           bad = 0
-          for f in sorted(glob.glob(".github/**/*.yml", recursive=True)):
+          files = sorted(set(glob.glob(".github/**/*.yml", recursive=True) + glob.glob("templates/agents/**/*.yml", recursive=True)))
+          for f in files:
               try: yaml.safe_load(open(f, encoding="utf-8"))
               except yaml.YAMLError as e: print(f"::error file={f}::{e}"); bad += 1
           sys.exit(bad)

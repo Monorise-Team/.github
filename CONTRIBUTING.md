@@ -84,6 +84,52 @@ Typy: `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `security`, `s
 - Milestone = wydanie (`v0.2.0`). Po wydaniu otwiera się następny.
 - Wszystkie części produktu mają jedną wersję, a wszystkie paczki `@monorise-team/*` też jedną.
 
+## Agenci AI i wspólne pliki
+
+Każde narzędzie AI (Claude, Gemini / Antigravity, ChatGPT / Codex, GitHub Copilot) czyta pliki z repozytorium, w którym pracuje. Żeby zasady się nie rozjeżdżały, jedno ich źródło żyje tutaj w `templates/agents/`, a skrypt `scripts/repo-setup.mjs` i codzienny workflow `.github/workflows/sync-shared.yml` rozsyłają je do każdego repozytorium organizacji.
+
+### Co powstaje ze wzorca, a co pisze się ręcznie
+
+| Plik w repozytorium | Pochodzenie |
+| --- | --- |
+| `AGENTS.md` (blok między `BEGIN:monorise-shared` i `END:monorise-shared`) | generowany z `templates/agents/shared.md` — zmieniaj wzorzec, nie ten blok |
+| `AGENTS.md` (część poniżej bloku) | pisana ręcznie dla danego repozytorium (czym jest, polecenia, zasady kodu); synchronizacja zostawia ją bez zmian |
+| `CLAUDE.md` | pisany ręcznie; musi zawierać odwołanie `@AGENTS.md` (gdy pliku albo odwołania brakuje, synchronizacja je dopisuje) |
+| `GEMINI.md` | generowany z `templates/agents/GEMINI.md` |
+| `.github/copilot-instructions.md` | generowany z `templates/agents/copilot-instructions.md` |
+| `.github/workflows/sync-shared.yml` | generowany z `templates/agents/sync-shared.yml` (we wszystkich repozytoriach poza `.github`) |
+| `.github/ISSUE_TEMPLATE/*` i `.github/pull_request_template.md` | generowane z `templates/` |
+
+Cały plik `AGENTS.md` musi zmieścić się w limicie 12 000 znaków (limit jednego pliku w Antigravity) — skrypt kończy się błędem, gdy plik go przekroczy.
+
+### Codzienna synchronizacja
+
+Raz dziennie (oraz ręcznie poleceniem `dispatch`) workflow `.github/workflows/sync-shared.yml` w każdym repozytorium uruchamia `node scripts/repo-setup.mjs sync`:
+
+- aktualizuje formularze, blok wspólnych zasad w `AGENTS.md` i pliki z manifestu;
+- usuwa wycofane pliki, które mają znacznik `monorise:generated` w pierwszych 5 liniach, a zniknęły z manifestu;
+- jeśli nic się nie zmieniło, kończy pracę;
+- jeśli są zmiany, zakłada (albo wykorzystuje otwarte) zgłoszenie `🔧 Chore: [<numer>] Synchronizacja wspólnych plików z .github` oraz gałąź `flow/chore/<numer>-sync-shared-files`, otwiera pull request do gałęzi domyślnej i od razu go scala zwykłym merge commitem (treść wzorca przeszła już przegląd i CI tutaj, a pull requesty zakładane tokenem `GITHUB_TOKEN` nie uruchamiają CI). Gdy scalenie się nie uda, pull request zostaje otwarty z opisem powodu w podsumowaniu zadania.
+
+### Jak zmienić wspólną zasadę albo dane „About”
+
+1. Załóż zgłoszenie i pull request w `Monorise-Team/.github` (zmień wzorzec w `templates/agents/` albo wpis w `labels/repos.json`).
+2. Po scaleniu pull requestu uruchom `node scripts/repo-setup.mjs dispatch`, żeby repozytoria dostały zmianę od razu (inaczej zadziała codzienna synchronizacja).
+3. Przy zmianie opisu, strony albo tematów w `labels/repos.json` uruchom `node scripts/repo-setup.mjs about <Repo>` dla zmienionych repozytoriów.
+
+### Audyt repozytoriów organizacji
+
+Codzienny audyt w tym repozytorium (`node scripts/repo-setup.mjs audit`) porównuje repozytoria organizacji z `labels/repos.json`: wyłapuje brakujące wpisy, nieistniejące repozytoria, rozbieżności w opisie, stronie i tematach („About”) oraz brak pliku `.github/workflows/sync-shared.yml` na gałęzi domyślnej. Gdy wykryje uwagi, otwiera albo aktualizuje jedno zgłoszenie `🔧 Chore: Audyt repozytoriów organizacji`; gdy wszystko jest zgodne, zamyka je.
+
+> Audyt w GitHub Actions działa z domyślnym tokenem `GITHUB_TOKEN`, który nie widzi repozytoriów prywatnych (np. `MonoriseDocumentation`). Wpisy z `"public": false` w `labels/repos.json` są wtedy pomijane po cichu — dla repozytoriów prywatnych uruchamiaj `audit` i `about` lokalnie z własnym zalogowanym `gh`.
+
+### Lista kontrolna nowego repozytorium
+
+1. Nazwę, przeznaczenie i strukturę ustala właściciel projektu.
+2. W `Monorise-Team/.github` dodaj wpis w `labels/repos.json` (rodzaj, obszary, kontrole, opis, strona, tematy), a po scaleniu uruchom `node scripts/repo-setup.mjs` z poleceniami `labels`, `sync`, `about` i `protect`.
+3. W nowym repozytorium uzupełnij część o repozytorium w `AGENTS.md` (czym jest, polecenia, zasady kodu), `CLAUDE.md` z `@AGENTS.md`, `README.md`, dostęp do potrzebnych paczek `@monorise-team/*` oraz `renovate.json`.
+4. W `MonoriseDocumentation` dopisz repozytorium na liście repozytoriów i w karcie produktu.
+
 ## Wspólne pliki
 
-To repozytorium (`Monorise-Team/.github`) trzyma wzorce: formularze (`templates/`), etykiety i ustawienia repozytoriów (`labels/`), automaty zgłoszeń i pull requestów (`.github/workflows/`) oraz skrypt `scripts/repo-setup.mjs`, który rozsyła je do repozytoriów. Zmiana procesu to zmiana tutaj.
+To repozytorium (`Monorise-Team/.github`) trzyma wzorce: formularze (`templates/`), zasady i pliki agentów AI (`templates/agents/`), etykiety, dane „About” i ustawienia repozytoriów (`labels/`), automaty zgłoszeń, pull requestów i synchronizacji (`.github/workflows/`) oraz skrypt `scripts/repo-setup.mjs`, który rozsyła je do repozytoriów. Zmiana procesu to zmiana tutaj.

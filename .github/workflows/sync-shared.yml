@@ -1,0 +1,315 @@
+name: Sync shared files
+
+# Wspólna synchronizacja formularzy, szablonu PR i plików agentów AI z Monorise-Team/.github
+# oraz codzienny audyt repozytoriów organizacji (issue #14).
+#
+# Inne repozytoria wywołują ten workflow plikiem .github/workflows/sync-shared.yml
+# (generowanym z templates/agents/sync-shared.yml):
+#
+#   jobs:
+#     sync:
+#       uses: Monorise-Team/.github/.github/workflows/sync-shared.yml@main
+
+on:
+  workflow_call:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync shared files
+    if: github.repository_owner == 'Monorise-Team' && github.repository != 'Monorise-Team/.github'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: sync-shared-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      HUSKY: "0"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Monorise-Team/.github
+        id: shared
+        uses: actions/checkout@v5
+        with:
+          repository: Monorise-Team/.github
+          ref: main
+          path: .monorise-shared
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Sync, open pull request and merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SHARED_SHA: ${{ steps.shared.outputs.commit }}
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${SHARED_SHA:0:12}"
+          TITLE_SUFFIX="Synchronizacja wspólnych plików z .github"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Sprawdź, czy istnieje otwarte zgłoszenie synchronizacji od github-actions[bot].
+          ISSUE_NUMBER=$(gh api "repos/$REPO/issues?state=open&creator=github-actions%5Bbot%5D&per_page=100" --paginate --slurp \
+            | jq -r 'add | [.[] | select(.pull_request == null and (.title | test("^🔧 Chore: \\[[0-9]{3,}\\] Synchronizacja wspólnych plików z \\.github$")))] | sort_by(.number) | .[0].number // empty')
+
+          REUSED_BRANCH=""
+          if [ -n "$ISSUE_NUMBER" ]; then
+            PADDED=$(printf '%03d' "$ISSUE_NUMBER")
+            CANDIDATE_BRANCH="flow/chore/${PADDED}-sync-shared-files"
+            if git ls-remote --exit-code --heads origin "$CANDIDATE_BRANCH" >/dev/null 2>&1; then
+              git fetch origin "$CANDIDATE_BRANCH"
+              git checkout -b "$CANDIDATE_BRANCH" "origin/$CANDIDATE_BRANCH"
+              if ! git merge --no-edit "origin/$DEFAULT_BRANCH"; then
+                git merge --abort || true
+                {
+                  echo "## Konflikt na gałęzi \`$CANDIDATE_BRANCH\`"
+                  echo ""
+                  echo "Nie udało się połączyć z \`$DEFAULT_BRANCH\`. Otwarte zgłoszenie (#$ISSUE_NUMBER) i pull request zostają do ręcznego rozwiązania."
+                } >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::Konflikt podczas aktualizacji gałęzi $CANDIDATE_BRANCH z $DEFAULT_BRANCH."
+                exit 1
+              fi
+              REUSED_BRANCH="$CANDIDATE_BRANCH"
+            fi
+          fi
+
+          node .monorise-shared/scripts/repo-setup.mjs sync "$REPO_NAME" .
+          rm -rf .monorise-shared
+
+          STATUS=$(git status --porcelain)
+
+          if [ -z "$REUSED_BRANCH" ] && [ -z "$STATUS" ]; then
+            echo "Wspólne pliki są aktualne (\`Monorise-Team/.github@${SHORT_SHA}\`)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          format_changes() {
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              code="${line:0:2}"
+              path="${line:3}"
+              case "$code" in
+                "??"|A*) action="dodano" ;;
+                *D*) action="usunięto" ;;
+                *) action="zmieniono" ;;
+              esac
+              echo "- \`$path\` ($action)"
+            done
+          }
+
+          if [ -n "$STATUS" ]; then
+            CHANGED_LIST=$(printf '%s\n' "$STATUS" | format_changes)
+          else
+            DIFF_STAT=$(git diff --name-status "origin/$DEFAULT_BRANCH"...HEAD)
+            if [ -z "$DIFF_STAT" ]; then
+              echo "Wspólne pliki są już aktualne na \`$DEFAULT_BRANCH\` (\`Monorise-Team/.github@${SHORT_SHA}\`)." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            CHANGED_LIST=$(printf '%s\n' "$DIFF_STAT" | awk '{
+              code=$1; $1=""; sub(/^[ \t]+/, "");
+              action=(code=="A" ? "dodano" : (code=="D" ? "usunięto" : "zmieniono"));
+              print "- `" $0 "` (" action ")"
+            }')
+          fi
+
+          REPO_LABELS=$(gh api "repos/$REPO/labels?per_page=100" --paginate --slurp | jq -r 'add | .[].name')
+          LABEL_ARGS=()
+          for wanted_label in "type: 🔧 chore" "prio: P3-low"; do
+            if printf '%s\n' "$REPO_LABELS" | grep -Fxq "$wanted_label"; then
+              LABEL_ARGS+=(--label "$wanted_label")
+            fi
+          done
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            ISSUE_BODY_FILE=$(mktemp)
+            cat <<EOF > "$ISSUE_BODY_FILE"
+          ### Rodzaj
+
+          Build / CI, czyli potoki, skrypty, konfiguracja
+
+          ### Co trzeba zrobić i dlaczego teraz
+
+          Automatyczna synchronizacja wspólnych plików z \`Monorise-Team/.github@${SHARED_SHA}\`.
+
+          Zmienione pliki:
+
+          ${CHANGED_LIST}
+
+          ### Priorytet
+
+          P3-low
+
+          ### Nakład pracy
+
+          Mały
+          EOF
+            ISSUE_URL=$(gh issue create --repo "$REPO" --title "$TITLE_SUFFIX" --body-file "$ISSUE_BODY_FILE" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+            rm -f "$ISSUE_BODY_FILE"
+            ISSUE_NUMBER="${ISSUE_URL##*/}"
+            PADDED=$(printf '%03d' "$ISSUE_NUMBER")
+            FINAL_TITLE="🔧 Chore: [${PADDED}] ${TITLE_SUFFIX}"
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --title "$FINAL_TITLE"
+          else
+            PADDED=$(printf '%03d' "$ISSUE_NUMBER")
+            FINAL_TITLE="🔧 Chore: [${PADDED}] ${TITLE_SUFFIX}"
+          fi
+
+          BRANCH="flow/chore/${PADDED}-sync-shared-files"
+          if [ -z "$REUSED_BRANCH" ]; then
+            git checkout -b "$BRANCH"
+          fi
+
+          if [ -n "$STATUS" ]; then
+            git add -A
+            git commit -m "chore: sync shared files from Monorise-Team/.github" -m "Source: Monorise-Team/.github@${SHARED_SHA}"
+          fi
+
+          if [ -z "$REUSED_BRANCH" ] || [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$BRANCH")" ]; then
+            git push -u origin "$BRANCH"
+          fi
+
+          PR_CHANGES=$(git diff --name-status "origin/$DEFAULT_BRANCH"...HEAD | awk '{
+            code=$1; $1=""; sub(/^[ \t]+/, "");
+            action=(code=="A" ? "dodano" : (code=="D" ? "usunięto" : "zmieniono"));
+            print "- `" $0 "` (" action ")"
+          }')
+
+          PR_BODY_FILE=$(mktemp)
+          cat <<EOF > "$PR_BODY_FILE"
+          ## Co i dlaczego
+
+          Automatyczna synchronizacja wspólnych plików z \`Monorise-Team/.github@${SHARED_SHA}\`.
+
+          Closes #${ISSUE_NUMBER}
+
+          ## Dla użytkowników
+
+          - PL: -
+          - EN: -
+
+          ## Zmiany
+
+          ${PR_CHANGES}
+          EOF
+
+          PR_NUMBER=$(gh pr list --repo "$REPO" --head "$BRANCH" --base "$DEFAULT_BRANCH" --state open --json number,author,title \
+            | jq -r '[.[] | select(.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions")] | .[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL=$(gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head "$BRANCH" --title "$FINAL_TITLE" --body-file "$PR_BODY_FILE" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+            PR_NUMBER="${PR_URL##*/}"
+          else
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$FINAL_TITLE" --body-file "$PR_BODY_FILE"
+          fi
+          rm -f "$PR_BODY_FILE"
+
+          # GitHub potrzebuje chwili, żeby policzyć stan scalenia zaraz po utworzeniu pull requestu.
+          MERGE_ERR=""
+          for attempt in 1 2 3 4 5; do
+            if MERGE_ERR=$(gh pr merge "$PR_NUMBER" --repo "$REPO" --merge 2>&1); then
+              echo "Zsynchronizowano wspólne pliki i scalono pull request #${PR_NUMBER} (zgłoszenie #${ISSUE_NUMBER}, źródło \`Monorise-Team/.github@${SHORT_SHA}\`)." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+
+          {
+            echo "## Nie udało się scalić pull requestu #${PR_NUMBER}"
+            echo ""
+            echo "Pull request zostaje otwarty do ręcznego sprawdzenia (zgłoszenie #${ISSUE_NUMBER}). Komunikat z GitHuba:"
+            echo ""
+            echo '```text'
+            echo "$MERGE_ERR"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Nie udało się scalić pull requestu #${PR_NUMBER}: ${MERGE_ERR}"
+          exit 1
+
+  audit:
+    name: Audit organization repositories
+    if: github.repository == 'Monorise-Team/.github' && github.event_name != 'workflow_call'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Run organization audit and update issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          AUDIT_TITLE="🔧 Chore: Audyt repozytoriów organizacji"
+          AUDIT_FILE=$(mktemp)
+
+          set +e
+          node scripts/repo-setup.mjs audit --markdown "$AUDIT_FILE"
+          AUDIT_EXIT=$?
+          set -e
+
+          if [ "$AUDIT_EXIT" -ne 0 ] && [ "$AUDIT_EXIT" -ne 1 ]; then
+            rm -f "$AUDIT_FILE"
+            exit "$AUDIT_EXIT"
+          fi
+
+          EXISTING=$(gh api "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp \
+            | jq -r --arg title "$AUDIT_TITLE" 'add | [.[] | select(.pull_request == null and .title == $title)] | sort_by(.number) | .[0].number // empty')
+
+          if [ "$AUDIT_EXIT" -eq 1 ]; then
+            if [ -n "$EXISTING" ]; then
+              gh issue edit "$EXISTING" --repo "$REPO" --body-file "$AUDIT_FILE"
+              echo "Zaktualizowano otwarte zgłoszenie audytu #${EXISTING}." >> "$GITHUB_STEP_SUMMARY"
+            else
+              REPO_LABELS=$(gh api "repos/$REPO/labels?per_page=100" --paginate --slurp | jq -r 'add | .[].name')
+              LABEL_ARGS=()
+              for wanted_label in "type: 🔧 chore" "prio: P2-medium"; do
+                if printf '%s\n' "$REPO_LABELS" | grep -Fxq "$wanted_label"; then
+                  LABEL_ARGS+=(--label "$wanted_label")
+                fi
+              done
+              ISSUE_URL=$(gh issue create --repo "$REPO" --title "$AUDIT_TITLE" --body-file "$AUDIT_FILE" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+              echo "Utworzono zgłoszenie audytu: ${ISSUE_URL}." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            if [ -n "$EXISTING" ]; then
+              gh issue close "$EXISTING" --repo "$REPO" --comment "Audyt przeszedł bez uwag — wszystkie widoczne repozytoria organizacji są zgodne."
+              echo "Zamknięto zgłoszenie audytu #${EXISTING} — brak niezgodności." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Audyt przeszedł bez uwag." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          rm -f "$AUDIT_FILE"
