@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 /**
- * Rozsyła wspólny proces pracy (ADR-0086) do repozytoriów organizacji Monorise-Team.
+ * Rozsyła wspólny proces pracy (ADR-0086) i zasady dla agentów AI do repozytoriów organizacji Monorise-Team.
  *
  *   node scripts/repo-setup.mjs forms <Repo> <katalog-.github> [--check]
  *       formularze zgłoszeń, config.yml i szablon pull requestu z templates/, z obszarami repozytorium;
  *       --check kończy się błędem, gdy zapisane pliki różnią się od wzorca
+ *   node scripts/repo-setup.mjs agents <Repo> <katalog-repo> [--check]
+ *       wspólny blok w AGENTS.md, odwołanie @AGENTS.md w CLAUDE.md, pliki z manifestu (GEMINI.md,
+ *       .github/copilot-instructions.md, .github/workflows/sync-shared.yml) oraz usuwanie wycofanych plików
+ *       z nagłówkiem monorise:generated; --check nic nie zapisuje i kończy się błędem przy różnicach
+ *   node scripts/repo-setup.mjs sync <Repo> <katalog-repo> [--check]
+ *       uruchamia forms (<katalog-repo>/.github) i agents (<katalog-repo>) razem
+ *   node scripts/repo-setup.mjs about <Repo> [--dry-run | --check]
+ *       ustawia opis, stronę i tematy repozytorium na GitHubie z labels/repos.json;
+ *       --check porównuje stan na GitHubie i kończy się błędem przy rozbieżności
  *   node scripts/repo-setup.mjs labels <Repo> [--dry-run]
  *       etykiety z labels/common.json i obszary area: z labels/repos.json (tworzy brakujące, poprawia różniące się)
  *   node scripts/repo-setup.mjs protect <Repo> [--dry-run]
@@ -14,11 +23,28 @@
  *       W repozytoriach produkcyjnych reguły nie wymagają zielonego CI: Release Please i powrót prod do dev
  *       scalają pull requesty tokenem GITHUB_TOKEN, a takie pull requesty nie uruchamiają CI. Zielone CI przed
  *       scaleniem pull requestu zadania jest umową zespołu, dopóki nie mamy własnej aplikacji GitHub.
+ *   node scripts/repo-setup.mjs dispatch [<Repo>…]
+ *       uruchamia workflow sync-shared.yml w podanych repozytoriach (albo we wszystkich z labels/repos.json
+ *       poza .github); pomija repozytoria, które nie mają jeszcze tego workflow
+ *   node scripts/repo-setup.mjs audit [--markdown <plik>]
+ *       sprawdza repozytoria organizacji na GitHubie przeciwko labels/repos.json (brakujące wpisy, nieistniejące
+ *       repozytoria, rozbieżności About, brak .github/workflows/sync-shared.yml); kończy się błędem przy uwagach
  *
- * Wymaga zalogowanego `gh` z uprawnieniem do administrowania repozytoriami.
+ * Polecenia odwołujące się do GitHuba wymagają zalogowanego `gh` (dla labels/protect/about z uprawnieniem admina).
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,11 +52,34 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ORG = "Monorise-Team";
 const PROJECT = `${ORG}/3`;
 
+const SHARED_TEMPLATE = "templates/agents/shared.md";
+const SHARED_BEGIN =
+  "<!-- BEGIN:monorise-shared (wstawione z Monorise-Team/.github, templates/agents/shared.md; zmieniaj wzorzec, nie ten blok) -->";
+const SHARED_END = "<!-- END:monorise-shared -->";
+const SHARED_BEGIN_RE = /<!-- BEGIN:monorise-shared(?:\s[^>]*)? -->/;
+const SHARED_BLOCK_RE = /<!-- BEGIN:monorise-shared(?:\s[^>]*)? -->[\s\S]*?<!-- END:monorise-shared -->/;
+const GENERATED_MARKER = "monorise:generated";
+const AGENTS_MAX_CHARS = 12000;
+const CLAUDE_IMPORT_LINE =
+  "Zasady pracy w tym repozytorium są wspólne dla wszystkich agentów i opisane w @AGENTS.md.";
+
+// Jedna lista plików zarządzanych w całości przez `agents` / `sync`.
+// Usunięcie wpisu stąd powoduje usunięcie pliku z nagłówkiem `monorise:generated` przy kolejnej synchronizacji.
+const AGENT_MANIFEST = [
+  { template: "templates/agents/GEMINI.md", target: "GEMINI.md" },
+  { template: "templates/agents/copilot-instructions.md", target: ".github/copilot-instructions.md" },
+  {
+    template: "templates/agents/sync-shared.yml",
+    target: ".github/workflows/sync-shared.yml",
+    skipRepos: [".github"],
+  },
+];
+
 const repos = JSON.parse(readFileSync(join(ROOT, "labels/repos.json"), "utf8"));
 const common = JSON.parse(readFileSync(join(ROOT, "labels/common.json"), "utf8"));
 
 function settingsOf(repo) {
-  const settings = repos[repo];
+  const settings = !repo.startsWith("$") ? repos[repo] : undefined;
   if (!settings) throw new Error(`Brak repozytorium ${repo} w labels/repos.json`);
   return settings;
 }
@@ -48,6 +97,10 @@ const ghJson = (args, options) => {
   const out = gh(args, options);
   return out === null ? null : JSON.parse(out || "null");
 };
+
+const normalizeTopics = (topics) => [...new Set((topics ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean))].sort();
+
+const arraysEqual = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 // ── Formularze ──────────────────────────────────────────────────────────────
 
@@ -177,8 +230,251 @@ function forms(repo, outDir, { check }) {
       console.log(`zapisano: ${target}`);
     }
   }
-  if (check && differs) process.exit(1);
   if (!differs) console.log(`${repo}: formularze zgodne ze wzorcem`);
+  return { differs };
+}
+
+// ── Pliki agentów AI ────────────────────────────────────────────────────────
+
+function insertAfterFirstHeading(text, snippet, fallbackHeading) {
+  const heading = text.match(/^# [^\r\n]*/m);
+  if (heading) {
+    const headingEnd = heading.index + heading[0].length;
+    const prefix = text.slice(0, headingEnd);
+    const rest = text.slice(headingEnd).replace(/^(?:\r?\n)+/, "");
+    return rest ? `${prefix}\n\n${snippet}\n\n${rest}` : `${prefix}\n\n${snippet}\n`;
+  }
+  const rest = text.replace(/^(?:\r?\n)+/, "");
+  return rest ? `${fallbackHeading}\n\n${snippet}\n\n${rest}` : `${fallbackHeading}\n\n${snippet}\n`;
+}
+
+function listTargetFiles(dir) {
+  if (existsSync(join(dir, ".git"))) {
+    try {
+      const out = execFileSync("git", ["-C", dir, "ls-files", "-z"], {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return out.split("\0").filter(Boolean);
+    } catch {
+      // Gdy `git` nie ma dostępu do nadrzędnego katalogu .git (np. w sandboxie), przechodzimy drzewo ręcznie.
+    }
+  }
+  const out = [];
+  const skip = new Set(["node_modules", ".git", ".monorise-shared"]);
+  const walk = (rel) => {
+    const full = rel ? join(dir, rel) : dir;
+    for (const entry of readdirSync(full, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const next = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(next);
+      else if (entry.isFile()) out.push(next);
+    }
+  };
+  if (existsSync(dir)) walk("");
+  return out;
+}
+
+function hasGeneratedMarker(filePath) {
+  let fd;
+  try {
+    if (!statSync(filePath).isFile()) return false;
+    fd = openSync(filePath, "r");
+    const buf = Buffer.alloc(4096);
+    const bytes = readSync(fd, buf, 0, buf.length, 0);
+    const head = buf.subarray(0, bytes);
+    if (head.includes(0)) return false;
+    return head.toString("utf8").split(/\r?\n/, 5).some((line) => line.includes(GENERATED_MARKER));
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+function agents(repo, repoDir, { check }) {
+  settingsOf(repo);
+  const sharedText = readFileSync(join(ROOT, SHARED_TEMPLATE), "utf8").trim();
+  const sharedBlock = `${SHARED_BEGIN}\n\n${sharedText}\n\n${SHARED_END}`;
+
+  let differs = 0;
+  let errors = 0;
+  const writes = [];
+  const deletes = [];
+  const checkLogs = [];
+
+  // 1. AGENTS.md
+  const agentsPath = join(repoDir, "AGENTS.md");
+  const currentAgents = existsSync(agentsPath) ? readFileSync(agentsPath, "utf8") : null;
+  let nextAgents = null;
+
+  if (currentAgents === null) {
+    nextAgents = [
+      "# AGENTS.md",
+      "",
+      sharedBlock,
+      "",
+      "## Czym jest to repozytorium",
+      "",
+      "Uzupełnij opis tego repozytorium: czym jest, jakie ma polecenia i jakie obowiązują w nim zasady kodu.",
+      "",
+    ].join("\n");
+    if (!check) {
+      console.warn(
+        `UWAGA: ${repo}: brakowało AGENTS.md — utworzono szablon, uzupełnij sekcję „Czym jest to repozytorium”.`,
+      );
+    }
+  } else {
+    const hasBegin = SHARED_BEGIN_RE.test(currentAgents);
+    const hasEnd = currentAgents.includes(SHARED_END);
+    if (hasBegin !== hasEnd) {
+      console.error(`BŁĄD: ${agentsPath} ma niekompletne znaczniki monorise-shared.`);
+      errors += 1;
+    } else if (hasBegin && hasEnd) {
+      nextAgents = currentAgents.replace(SHARED_BLOCK_RE, () => sharedBlock);
+    } else {
+      nextAgents = insertAfterFirstHeading(currentAgents, sharedBlock, "# AGENTS.md");
+    }
+  }
+
+  if (nextAgents !== null) {
+    if (nextAgents.length > AGENTS_MAX_CHARS) {
+      console.error(
+        `BŁĄD: ${agentsPath} ma ${nextAgents.length} znaków (limit ${AGENTS_MAX_CHARS} dla Antigravity). Skróć część specyficzną dla repozytorium.`,
+      );
+      errors += 1;
+    } else if (currentAgents !== nextAgents) {
+      differs += 1;
+      const verb = currentAgents === null ? "utworzono" : "zapisano";
+      checkLogs.push(`${currentAgents === null ? "do utworzenia" : "do zmiany"}: ${agentsPath}`);
+      writes.push({ path: agentsPath, content: nextAgents, verb });
+    }
+  }
+
+  // 2. CLAUDE.md
+  const claudePath = join(repoDir, "CLAUDE.md");
+  const currentClaude = existsSync(claudePath) ? readFileSync(claudePath, "utf8") : null;
+  if (currentClaude === null) {
+    const nextClaude = `# CLAUDE.md\n\n${CLAUDE_IMPORT_LINE}\n`;
+    differs += 1;
+    checkLogs.push(`do utworzenia: ${claudePath}`);
+    writes.push({ path: claudePath, content: nextClaude, verb: "utworzono" });
+  } else if (!currentClaude.includes("@AGENTS.md")) {
+    const nextClaude = insertAfterFirstHeading(currentClaude, CLAUDE_IMPORT_LINE, "# CLAUDE.md");
+    differs += 1;
+    checkLogs.push(`do zmiany (brak @AGENTS.md): ${claudePath}`);
+    writes.push({ path: claudePath, content: nextClaude, verb: "zapisano" });
+  }
+
+  // 3. Pliki z manifestu
+  const activeManifest = AGENT_MANIFEST.filter((entry) => !entry.skipRepos?.includes(repo));
+  const activeTargets = new Set(activeManifest.map((entry) => entry.target));
+
+  for (const { template, target } of activeManifest) {
+    const content = readFileSync(join(ROOT, template), "utf8");
+    const fullTarget = join(repoDir, target);
+    const current = existsSync(fullTarget) ? readFileSync(fullTarget, "utf8") : null;
+    if (current === content) continue;
+    differs += 1;
+    const verb = current === null ? "utworzono" : "zapisano";
+    checkLogs.push(`${current === null ? "do utworzenia" : "do zmiany"}: ${fullTarget}`);
+    writes.push({ path: fullTarget, content, verb });
+  }
+
+  // 4. Usuwanie wycofanych plików oznaczonych monorise:generated
+  for (const rel of listTargetFiles(repoDir).sort()) {
+    const norm = rel.split("\\").join("/");
+    if (activeTargets.has(norm)) continue;
+    if (repo === ".github" && norm.startsWith("templates/")) continue;
+    const full = join(repoDir, norm);
+    if (!existsSync(full) || !hasGeneratedMarker(full)) continue;
+    differs += 1;
+    checkLogs.push(`do usunięcia: ${full}`);
+    deletes.push(full);
+  }
+
+  if (check) {
+    for (const line of checkLogs) console.log(line);
+  } else if (!errors) {
+    for (const { path, content, verb } of writes) {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, content);
+      console.log(`${verb}: ${path}`);
+    }
+    for (const path of deletes) {
+      unlinkSync(path);
+      console.log(`usunięto: ${path}`);
+    }
+  }
+
+  if (!differs && !errors) console.log(`${repo}: pliki agentów zgodne ze wzorcem`);
+  return { differs, errors };
+}
+
+function sync(repo, repoDir, { check }) {
+  const formsResult = forms(repo, join(repoDir, ".github"), { check });
+  const agentsResult = agents(repo, repoDir, { check });
+  return {
+    differs: formsResult.differs + agentsResult.differs,
+    errors: agentsResult.errors,
+  };
+}
+
+// ── About (opis, strona, tematy) ────────────────────────────────────────────
+
+function about(repo, { dryRun, check }) {
+  const settings = settingsOf(repo);
+  const hasDesc = settings.description !== undefined;
+  const hasHomepage = settings.homepage !== undefined;
+  const hasTopics = Array.isArray(settings.topics);
+
+  if (!hasDesc && !hasHomepage && !hasTopics) {
+    console.log(`${repo}: brak pól description/homepage/topics w labels/repos.json`);
+    return check ? 1 : 0;
+  }
+
+  const info = ghJson(["api", `repos/${ORG}/${repo}`]);
+  const currentDesc = info.description ?? "";
+  const currentHomepage = info.homepage ?? "";
+  const rawTopics = Array.isArray(info.topics)
+    ? info.topics
+    : (ghJson(["api", `repos/${ORG}/${repo}/topics`])?.names ?? []);
+  const currentTopics = normalizeTopics(rawTopics);
+  const wantTopics = hasTopics ? normalizeTopics(settings.topics) : null;
+
+  const diffs = [];
+  if (hasDesc && currentDesc !== settings.description) {
+    diffs.push(`opis: „${currentDesc}” -> „${settings.description}”`);
+  }
+  if (hasHomepage && currentHomepage !== settings.homepage) {
+    diffs.push(`strona: „${currentHomepage}” -> „${settings.homepage}”`);
+  }
+  if (hasTopics && !arraysEqual(currentTopics, wantTopics)) {
+    diffs.push(`tematy: [${currentTopics.join(", ")}] -> [${wantTopics.join(", ")}]`);
+  }
+
+  if (!diffs.length) {
+    console.log(`${repo}: ustawienia „About” zgodne z labels/repos.json`);
+    return 0;
+  }
+
+  for (const diff of diffs) console.log(`${repo}: ${diff}`);
+  if (check) return 1;
+  if (dryRun) return 0;
+
+  if ((hasDesc && currentDesc !== settings.description) || (hasHomepage && currentHomepage !== settings.homepage)) {
+    const editArgs = ["repo", "edit", `${ORG}/${repo}`];
+    if (hasDesc) editArgs.push("--description", settings.description);
+    if (hasHomepage) editArgs.push("--homepage", settings.homepage);
+    gh(editArgs);
+  }
+  if (hasTopics && !arraysEqual(currentTopics, wantTopics)) {
+    gh(["api", "-X", "PUT", `repos/${ORG}/${repo}/topics`, "--input", "-"], {
+      input: JSON.stringify({ names: wantTopics }),
+    });
+  }
+  console.log(`${repo}: zaktualizowano ustawienia „About”`);
+  return 0;
 }
 
 // ── Etykiety ────────────────────────────────────────────────────────────────
@@ -310,16 +606,198 @@ function protect(repo, { dryRun }) {
   }
 }
 
+// ── Dispatch i audyt ────────────────────────────────────────────────────────
+
+function dispatch(targets) {
+  const list = targets.length
+    ? targets
+    : Object.keys(repos).filter((name) => !name.startsWith("$") && name !== ".github");
+  let triggered = 0;
+  let missing = 0;
+  let failed = 0;
+
+  for (const repo of list) {
+    if (repo === ".github") {
+      console.log(`.github: pomijam — to repozytorium jest źródłem wzorców`);
+      continue;
+    }
+    try {
+      gh(["workflow", "run", "sync-shared.yml", "-R", `${ORG}/${repo}`]);
+      console.log(`${repo}: uruchomiono sync-shared.yml`);
+      triggered += 1;
+    } catch (error) {
+      const msg = error.message || "";
+      if (/404|not found|could not find any workflows/i.test(msg)) {
+        console.log(`${repo}: brak workflow sync-shared.yml (albo repozytorium nie istnieje) — pomijam`);
+        missing += 1;
+      } else {
+        console.error(`${repo}: błąd uruchamiania sync-shared.yml: ${msg.trim()}`);
+        failed += 1;
+      }
+    }
+  }
+  console.log(`Podsumowanie dispatch: uruchomiono ${triggered}, brak workflow ${missing}, błędów ${failed}.`);
+  return failed > 0 ? 1 : 0;
+}
+
+function audit({ markdownPath }) {
+  const listed = ghJson([
+    "repo",
+    "list",
+    ORG,
+    "--json",
+    "name,description,homepageUrl,repositoryTopics,isPrivate,isArchived",
+    "--limit",
+    "200",
+  ]);
+  const active = listed.filter((r) => !r.isArchived).sort((a, b) => a.name.localeCompare(b.name));
+  const activeByName = new Map(active.map((r) => [r.name, r]));
+  const archivedNames = new Set(listed.filter((r) => r.isArchived).map((r) => r.name));
+  const configured = Object.entries(repos).filter(([name]) => !name.startsWith("$"));
+  const configuredNames = new Set(configured.map(([name]) => name));
+
+  const problems = [];
+
+  for (const repo of active) {
+    if (!configuredNames.has(repo.name)) {
+      problems.push(`- **${repo.name}**: brak wpisu w \`labels/repos.json\`.`);
+    }
+  }
+
+  for (const [name, cfg] of configured) {
+    if (activeByName.has(name) || archivedNames.has(name)) continue;
+    if (cfg.public === false) continue;
+    problems.push(
+      `- **${name}**: wpis istnieje w \`labels/repos.json\`, ale repozytorium nie istnieje w organizacji \`${ORG}\` (albo nie jest widoczne dla tokenu).`,
+    );
+  }
+
+  for (const repo of active) {
+    if (!configuredNames.has(repo.name)) continue;
+    const cfg = repos[repo.name];
+    const hasDesc = cfg.description !== undefined;
+    const hasHomepage = cfg.homepage !== undefined;
+    const hasTopics = Array.isArray(cfg.topics);
+
+    if (!hasDesc && !hasHomepage && !hasTopics) {
+      problems.push(`- **${repo.name}**: brak pól \`description\`, \`homepage\` i \`topics\` w \`labels/repos.json\`.`);
+    } else {
+      const diffs = [];
+      if (hasDesc && (repo.description ?? "") !== cfg.description) {
+        diffs.push(`opis („${repo.description ?? ""}” != „${cfg.description}”)`);
+      }
+      if (hasHomepage && (repo.homepageUrl ?? "") !== cfg.homepage) {
+        diffs.push(`strona („${repo.homepageUrl ?? ""}” != „${cfg.homepage}”)`);
+      }
+      if (hasTopics) {
+        const currentTopics = normalizeTopics(
+          (repo.repositoryTopics ?? []).map((t) => (typeof t === "string" ? t : (t?.name ?? ""))),
+        );
+        const wantTopics = normalizeTopics(cfg.topics);
+        if (!arraysEqual(currentTopics, wantTopics)) {
+          diffs.push(`tematy ([${currentTopics.join(", ")}] != [${wantTopics.join(", ")}])`);
+        }
+      }
+      if (diffs.length) {
+        problems.push(
+          `- **${repo.name}**: rozbieżność „About” (${diffs.join("; ")}) — uruchom \`node scripts/repo-setup.mjs about ${repo.name}\`.`,
+        );
+      }
+    }
+
+    if (repo.name !== ".github") {
+      const hasSync = gh(["api", `repos/${ORG}/${repo.name}/contents/.github/workflows/sync-shared.yml`], {
+        allowFail: true,
+      });
+      if (hasSync === null) {
+        problems.push(
+          `- **${repo.name}**: brak pliku \`.github/workflows/sync-shared.yml\` na gałęzi domyślnej (codzienna synchronizacja nie działa).`,
+        );
+      }
+    }
+  }
+
+  const lines = problems.length
+    ? [
+        `Wykryto ${problems.length} niezgodności w repozytoriach organizacji \`${ORG}\`:`,
+        "",
+        ...problems,
+        "",
+        "---",
+        "",
+        "Uwaga: audyt w GitHub Actions używa tokenu `GITHUB_TOKEN`, dlatego repozytoria prywatne (oznaczone `public: false` w `labels/repos.json`) mogą nie być widoczne i są wtedy pomijane.",
+        "",
+      ]
+    : [
+        `Wszystkie widoczne repozytoria organizacji \`${ORG}\` są zgodne z \`labels/repos.json\` i mają \`.github/workflows/sync-shared.yml\`.`,
+        "",
+      ];
+  const output = lines.join("\n");
+
+  if (markdownPath) {
+    mkdirSync(dirname(markdownPath), { recursive: true });
+    writeFileSync(markdownPath, output);
+  }
+  process.stdout.write(output);
+  return problems.length > 0 ? 1 : 0;
+}
+
 // ── Wywołanie ───────────────────────────────────────────────────────────────
 
-const [command, repo, outDir] = process.argv.slice(2);
-const flags = new Set(process.argv.slice(2).filter((arg) => arg.startsWith("--")));
-const usage = "Użycie: repo-setup.mjs forms <Repo> <katalog> [--check] | labels <Repo> [--dry-run] | protect <Repo> [--dry-run]";
+const rawArgs = process.argv.slice(2);
+const flags = new Set();
+const options = new Map();
+const positional = [];
+for (let i = 0; i < rawArgs.length; i += 1) {
+  const arg = rawArgs[i];
+  if (arg === "--markdown") {
+    const next = rawArgs[i + 1];
+    if (!next || next.startsWith("--")) {
+      console.error("Brak ścieżki po --markdown");
+      process.exit(2);
+    }
+    options.set("markdown", next);
+    i += 1;
+  } else if (arg.startsWith("--")) {
+    flags.add(arg);
+  } else {
+    positional.push(arg);
+  }
+}
 
-if (command === "forms" && repo && outDir && !outDir.startsWith("--")) forms(repo, outDir, { check: flags.has("--check") });
-else if (command === "labels" && repo) labels(repo, { dryRun: flags.has("--dry-run") });
-else if (command === "protect" && repo) protect(repo, { dryRun: flags.has("--dry-run") });
-else {
+const [command, repo, dir] = positional;
+const usage = [
+  "Użycie: repo-setup.mjs",
+  "  forms <Repo> <katalog-.github> [--check]",
+  "  agents <Repo> <katalog-repo> [--check]",
+  "  sync <Repo> <katalog-repo> [--check]",
+  "  about <Repo> [--dry-run | --check]",
+  "  labels <Repo> [--dry-run]",
+  "  protect <Repo> [--dry-run]",
+  "  dispatch [<Repo>…]",
+  "  audit [--markdown <plik>]",
+].join("\n");
+
+if (command === "forms" && repo && dir) {
+  const { differs } = forms(repo, dir, { check: flags.has("--check") });
+  if (flags.has("--check") && differs) process.exit(1);
+} else if (command === "agents" && repo && dir) {
+  const { differs, errors } = agents(repo, dir, { check: flags.has("--check") });
+  if (errors || (flags.has("--check") && differs)) process.exit(1);
+} else if (command === "sync" && repo && dir) {
+  const { differs, errors } = sync(repo, dir, { check: flags.has("--check") });
+  if (errors || (flags.has("--check") && differs)) process.exit(1);
+} else if (command === "about" && repo) {
+  process.exit(about(repo, { dryRun: flags.has("--dry-run"), check: flags.has("--check") }));
+} else if (command === "labels" && repo) {
+  labels(repo, { dryRun: flags.has("--dry-run") });
+} else if (command === "protect" && repo) {
+  protect(repo, { dryRun: flags.has("--dry-run") });
+} else if (command === "dispatch") {
+  process.exit(dispatch(positional.slice(1)));
+} else if (command === "audit") {
+  process.exit(audit({ markdownPath: options.get("markdown") }));
+} else {
   console.error(usage);
   process.exit(2);
 }
