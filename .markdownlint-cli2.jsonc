@@ -1,0 +1,21 @@
+{
+  // Reguły stylu Markdown zgodne z MonoriseDocumentation, ograniczone do wzorców i plików agentów.
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD024": { "siblings_only": true },
+    "MD025": { "front_matter_title": "" },
+    // templates/agents/shared.md jest wstawianym blokiem i zaczyna się od nagłówka drugiego poziomu (##).
+    "MD041": false,
+    "MD033": false,
+    "MD036": false,
+    "MD060": false
+  },
+  "globs": [
+    "templates/agents/*.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".github/copilot-instructions.md"
+  ]
+}
