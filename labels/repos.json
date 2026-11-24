@@ -258,7 +258,6 @@
     ]
   },
   "TimoTime": {
-    "planned": true,
     "kind": "production",
     "public": true,
     "areas": [
@@ -297,6 +296,16 @@
     ],
     "checks": [
       "Format, lint, types, tests and build"
+    ],
+    "description": "TimoTime: ewidencja czasu pracy Monorise w przeglądarce i na telefonie",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "time-tracking",
+      "nextjs",
+      "expo",
+      "prisma",
+      "postgresql"
     ]
   }
 }
