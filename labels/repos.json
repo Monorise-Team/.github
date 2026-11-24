@@ -1,5 +1,5 @@
 {
-  "$comment": "Ustawienia procesu dla każdego repozytorium (scripts/repo-setup.mjs). kind: production = dev, prod i flow/*; main = main i flow/*. checks: zadania CI wymagane w pull requestach (nazwy zadań, jak pokazuje je GitHub). public: reguły ochrony gałęzi działają na planie Free tylko w repozytoriach publicznych. description, homepage, topics: dane sekcji „About” na GitHubie (polecenie about i audit).",
+  "$comment": "Ustawienia procesu dla każdego repozytorium (scripts/repo-setup.mjs). kind: production = dev, prod i flow/*; main = main i flow/*. checks: zadania CI wymagane w pull requestach (nazwy zadań, jak pokazuje je GitHub). public: reguły ochrony gałęzi działają na planie Free tylko w repozytoriach publicznych. description, homepage, topics: dane sekcji „About” na GitHubie (polecenie about i audit). planned: repozytorium zaplanowane, jeszcze nie istnieje (audit i dispatch je pomijają).",
   ".github": {
     "kind": "main",
     "public": true,
@@ -242,6 +242,7 @@
     ]
   },
   "TimoTime": {
+    "planned": true,
     "kind": "production",
     "public": true,
     "areas": [

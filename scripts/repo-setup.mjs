@@ -611,7 +611,7 @@ function protect(repo, { dryRun }) {
 function dispatch(targets) {
   const list = targets.length
     ? targets
-    : Object.keys(repos).filter((name) => !name.startsWith("$") && name !== ".github");
+    : Object.keys(repos).filter((name) => !name.startsWith("$") && name !== ".github" && !repos[name].planned);
   let triggered = 0;
   let missing = 0;
   let failed = 0;
@@ -666,7 +666,7 @@ function audit({ markdownPath }) {
 
   for (const [name, cfg] of configured) {
     if (activeByName.has(name) || archivedNames.has(name)) continue;
-    if (cfg.public === false) continue;
+    if (cfg.public === false || cfg.planned) continue;
     problems.push(
       `- **${name}**: wpis istnieje w \`labels/repos.json\`, ale repozytorium nie istnieje w organizacji \`${ORG}\` (albo nie jest widoczne dla tokenu).`,
     );
