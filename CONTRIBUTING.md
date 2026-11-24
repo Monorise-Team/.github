@@ -146,6 +146,8 @@ Typy: `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `security`, `s
 - `dev`, `flow/*` i gałęzie automatów nie wdrażają się. Zmiany przed scaleniem sprawdzasz lokalnie i w CI.
 - Na Vercel `vercel.json` włącza wdrożenia tylko dla `prod` i `preview` (`"git": { "deploymentEnabled": { "**": false, "prod": true, "preview": true } }`), a w projekcie są włączone wpisy wdrożeń na GitHubie. Wzór: MonoriseWebsite.
 - Na `preview` nikt nie commituje ręcznie. Gdy automat zgłosi, że nie da się jej przesunąć do przodu, opiekun ustawia ją raz na `dev`.
+- W nowym repozytorium pierwsze uruchomienie tylko zakłada `preview`: Vercel nie buduje samego utworzenia gałęzi, buduje każde kolejne przesunięcie (po nowym commicie na `dev`).
+- Podglądy Vercel są chronione logowaniem: widzą je osoby z zespołu zalogowane do Vercel. Środowiska GitHub nie mają reguł gałęzi, bo Vercel zapisuje wdrożenia z pełnym SHA; pilnuje tego `vercel.json`.
 
 ## 7. Dyskusje
 
