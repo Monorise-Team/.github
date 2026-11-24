@@ -7,6 +7,7 @@ Wspólne pliki organizacji Monorise:
 | `profile/` | profil organizacji na GitHubie (`profile/README.md`, grafiki, statystyki) |
 | `CONTRIBUTING.md`, `SECURITY.md` | zasady pracy i zgłaszania podatności dla wszystkich repozytoriów |
 | `templates/` | wzorce formularzy zgłoszeń i szablonu pull requestu |
+| `.github/DISCUSSION_TEMPLATE/` | formularze kategorii [dyskusji organizacji](https://github.com/orgs/Monorise-Team/discussions) (Architektura (RFC), Pytania i odpowiedzi); zasady w CONTRIBUTING, punkt 7 |
 | `templates/agents/` | wzorce wspólnych zasad dla agentów AI (`shared.md`, `GEMINI.md`, `copilot-instructions.md`, `sync-shared.yml`) |
 | `labels/` | etykiety wspólne (`common.json`) oraz obszary, ustawienia i dane „About” każdego repozytorium (`repos.json`) |
 | `.github/workflows/` | automaty zgłoszeń i pull requestów, powrót `prod` do `dev`, synchronizacja wspólnych plików (`sync-shared.yml`) i audyt organizacji |
