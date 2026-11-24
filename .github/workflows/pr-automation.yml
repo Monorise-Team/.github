@@ -18,10 +18,11 @@ name: PR automation
 # 2. Tytuł i etykieta: flow/chore/012-release-builds „Buildy tylko z prod i dev”
 #    -> „🔧 Chore: [012] Buildy tylko z prod i dev” i etykieta type:. Wydanie dev -> prod: „🚀 Release: dev → prod”.
 # 3. Panel boczny: autor jako osoba przypisana, etykiety area:/prio: i milestone ze zgłoszenia (albo najbliższego
-#    wydania) oraz „Closes #<numer>”, gdy brakuje go w opisie.
+#    wydania), „Closes #<numer>”, gdy brakuje go w opisie, oraz Start date na zamykanym zgłoszeniu (gdy puste,
+#    best-effort).
 #
-# Bez checkoutu: żaden kod z pull requestu nie działa z tym tokenem. Zmiana nazwy przez GITHUB_TOKEN nie
-# uruchamia kolejnych workflowów.
+# Bez checkoutu kodu z pull requestu (pobieramy tylko scripts/lib z Monorise-Team/.github@main): żaden kod z pull
+# requestu nie działa z tym tokenem. Zmiana nazwy przez GITHUB_TOKEN nie uruchamia kolejnych workflowów.
 
 on:
   pull_request:
@@ -138,10 +139,19 @@ jobs:
               catch (e) { core.warning(`Etykieta ${label}: ${e.message}`); }
             }
 
+      - name: Fetch shared metadata rules
+        continue-on-error: true
+        run: |
+          git clone --depth=1 --filter=blob:none --sparse --branch main https://github.com/Monorise-Team/.github.git .monorise-shared
+          git -C .monorise-shared sparse-checkout set scripts/lib
+
       - name: Assignee, labels, milestone and linked issue
         uses: actions/github-script@v7
         with:
           script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+
             const RELEASE = /^v(\d+)\.(\d+)\.(\d+)$/;
             const pr = context.payload.pull_request;
             const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number };
@@ -175,4 +185,98 @@ jobs:
             if (issue && !closes(issue.number).test(pr.body ?? '')) {
               const body = `${(pr.body ?? '').trimEnd()}\n\nCloses #${issue.number}`.trimStart();
               await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, body });
+            }
+
+            // Upewnij się, że zamykane zgłoszenie ma ustawione Start date (best-effort).
+            const summary = [];
+            const ISSUE_FIELDS_HEADERS = { 'GraphQL-Features': 'issue_fields' };
+            try {
+              const meta = await import(pathToFileURL(path.resolve('.monorise-shared/scripts/lib/issue-meta.mjs')).href);
+              const targets = new Map();
+              const prData = await github.graphql(meta.PR_CLOSING_ISSUES_QUERY, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: pr.number,
+                headers: ISSUE_FIELDS_HEADERS,
+              });
+              for (const node of prData?.repository?.pullRequest?.closingIssuesReferences?.nodes || []) {
+                if (!node?.id || !node?.repository?.owner?.login || !node?.repository?.name) continue;
+                const key = meta.issueRefKey({
+                  owner: node.repository.owner.login,
+                  repo: node.repository.name,
+                  number: node.number,
+                });
+                targets.set(key, node);
+              }
+              if (issue) {
+                const branchKey = meta.issueRefKey({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  number: issue.number,
+                });
+                if (!targets.has(branchKey)) {
+                  const issueData = await github.graphql(meta.ISSUE_FIELD_VALUES_QUERY, {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    number: issue.number,
+                    headers: ISSUE_FIELDS_HEADERS,
+                  });
+                  const node = issueData?.repository?.issue;
+                  if (node?.id) {
+                    targets.set(branchKey, {
+                      ...node,
+                      repository: { owner: { login: context.repo.owner }, name: context.repo.repo },
+                    });
+                  }
+                }
+              }
+
+              if (targets.size) {
+                const orgData = await github.graphql(meta.ORG_ISSUE_FIELDS_QUERY, {
+                  org: context.repo.owner,
+                  headers: ISSUE_FIELDS_HEADERS,
+                });
+                const orgFields = meta.indexOrgIssueFields(orgData?.organization);
+                for (const targetIssue of targets.values()) {
+                  const label = meta.formatIssueRef(
+                    {
+                      owner: targetIssue.repository.owner.login,
+                      repo: targetIssue.repository.name,
+                      number: targetIssue.number,
+                    },
+                    { defaultOwner: context.repo.owner, defaultRepo: context.repo.repo },
+                  );
+                  const currentFields = meta.extractCurrentFieldValues(targetIssue.issueFieldValues?.nodes || []);
+                  if (currentFields[meta.FIELD_NAMES.START_DATE]) {
+                    summary.push(`- ${label}: Start date już ustawione (\`${currentFields[meta.FIELD_NAMES.START_DATE]}\`)`);
+                    continue;
+                  }
+                  const startDate = meta.toWarsawDate(targetIssue.createdAt);
+                  const { inputs, skipped } = meta.buildSetIssueFieldsInput(
+                    { [meta.FIELD_NAMES.START_DATE]: startDate },
+                    orgFields,
+                  );
+                  if (!inputs.length) {
+                    summary.push(`- ${label}: pominięto Start date (${skipped.join(', ') || 'brak pola'})`);
+                    continue;
+                  }
+                  try {
+                    await github.graphql(meta.SET_ISSUE_FIELD_VALUE_MUTATION, {
+                      issueId: targetIssue.id,
+                      issueFields: inputs,
+                      headers: ISSUE_FIELDS_HEADERS,
+                    });
+                    summary.push(`- ${label}: ustawiono Start date \`${startDate}\``);
+                  } catch (error) {
+                    core.warning(`Start date dla ${label}: ${error.message}`);
+                    summary.push(`- ⚠️ ${label}: nie udało się ustawić Start date (${error.message})`);
+                  }
+                }
+              }
+            } catch (error) {
+              core.warning(`Start date zamykanego zgłoszenia: ${error.message}`);
+              summary.push(`- ⚠️ Start date zamykanego zgłoszenia: pominięto (${error.message})`);
+            }
+            if (summary.length) {
+              await core.summary.addHeading('Metadane zamykanego zgłoszenia', 3).addRaw(`${summary.join('\n')}\n`).write();
             }

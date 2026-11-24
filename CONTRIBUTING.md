@@ -31,7 +31,59 @@ Nie od kodu ani od gałęzi, tylko od zgłoszenia (issue) z formularza. Pustych 
 
 > **Podatność, którą da się wykorzystać, nie idzie przez zgłoszenie.** Zgłoś ją prywatnie: [SECURITY.md](SECURITY.md).
 
-Automat dopisuje do tytułu typ i numer (`🐛 Bugfix: [009] Problem z załącznikami`), nakłada etykiety z formularza, przypisuje autora i milestone najbliższego wydania, a kartę dodaje na tablicę „Monorise”.
+Automat dopisuje do tytułu typ i numer (`🐛 Bugfix: [009] Problem z załącznikami`), nakłada etykiety z formularza, przypisuje autora, typ zgłoszenia, pola organizacji, relacje i milestone najbliższego wydania, a kartę dodaje na tablicę „Monorise”.
+
+### Pola zgłoszeń, zależności i polecenie `meta`
+
+Każde zgłoszenie ma zestaw pól organizacji (Issue fields) oraz metadanych w panelu bocznym:
+
+| Pole | Wartości | Jak uzupełnia je automat |
+| --- | --- | --- |
+| `Priority` | `Urgent`, `High`, `Medium`, `Low` | z sekcji „Priorytet” albo etykiety `prio:`: `P0-critical` → `Urgent`, `P1-high` → `High`, `P2-medium` → `Medium`, `P3-low` → `Low` |
+| `Effort` | `Low`, `Medium`, `High` | z sekcji „Nakład pracy”: `Mały` → `Low`, `Średni` → `Medium`, `Duży` → `High`; przy braku odpowiedzi `Medium` |
+| `Start date` | data `YYYY-MM-DD` | gdy puste: dzień założenia zgłoszenia (strefa `Europe/Warsaw`); pilnuje tego też automat pull requestów przy zamykanym zgłoszeniu |
+| `Target date` | data `YYYY-MM-DD` | gdy puste: dla otwartego `Start date` + 0 dni (`Low`), + 2 dni (`Medium`) albo + 7 dni (`High`); dla zamkniętego dzień zamknięcia |
+| Typ zgłoszenia | `Bug`, `Feature`, `Task` | z etykiety `type:` (`bugfix` i `security` → `Bug`, `feature` → `Feature`, reszta → `Task`) |
+| Milestone | najbliższe otwarte `vX.Y.Z` | gdy brak (zamknięte jako `not planned` nie dostają milestone) |
+
+Automat (`issue-automation.yml`) nie nadpisuje raz ustawionych dat, a `Priority` i `Effort` aktualizuje przy edycji treści zgłoszenia. W zgłoszeniach automatycznej synchronizacji (`sync-shared.yml`) ustawia `Priority: Low`, `Effort: Low` oraz `Start date` i `Target date` na bieżący dzień (gdy puste).
+
+W sekcji **„Zależności”** wpisujesz relacje, po jednej linii na typ (wiele odwołań w jednej linii rozdziel przecinkami):
+
+- `Czeka na:` — zgłoszenia blokujące (dodaje relację „blocked by”);
+- `Część:` — większe zgłoszenie nadrzędne (dodaje bieżące zgłoszenie jako podzadanie).
+
+Obsługiwane formaty odwołań (także między repozytoriami organizacji): `#12`, `Repo#12`, `Monorise-Team/Repo#12` oraz pełny adres URL zgłoszenia na GitHubie, np.:
+
+```text
+Czeka na: #12, MonoriseCore#13, https://github.com/Monorise-Team/AvenMail/issues/42
+Część: Monorise-Team/MonoriseShared#4
+```
+
+Gdy czegoś brakuje (w starszych zgłoszeniach albo po założeniu zgłoszenia ręcznie bez formularza), uruchom w `Monorise-Team/.github`:
+
+```bash
+# Podgląd pełnego uzupełnienia (backfill) wszystkich zgłoszeń i pull requestów repozytorium:
+node scripts/repo-setup.mjs meta MonoriseShared --dry-run
+
+# Zapis pełnego uzupełnienia:
+node scripts/repo-setup.mjs meta MonoriseShared
+
+# Jedno zgłoszenie z ręcznymi wartościami i relacją:
+node scripts/repo-setup.mjs meta MonoriseShared --issue 18 \
+  --priority High --effort Medium --start 2026-11-24 --target 2026-11-26 \
+  --blocked-by MonoriseCore#13 --parent #4
+```
+
+Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`/`prio:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola i dopisać relacje (`--blocked-by`, `--parent`).
+
+**Gałąź w sekcji „Development”:** GitHub nie pozwala podpiąć pod zgłoszenie już istniejącej gałęzi przez API (`createLinkedBranch` tworzy wyłącznie nową gałąź). Żeby gałąź była widoczna w „Development”, załóż ją najpierw ze zgłoszenia:
+
+```bash
+gh issue develop <n> --base <base> --name flow/<typ>/<nnn>-<opis>
+```
+
+Przy delegowaniu zadania przez Relay Bridge utwórz lokalny `git worktree` tej gałęzi i przekaż go do zlecenia z `isolation: "in_place"`.
 
 ## 2. Etykiety
 

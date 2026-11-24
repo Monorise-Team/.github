@@ -97,7 +97,9 @@ jobs:
           fi
 
           node .monorise-shared/scripts/repo-setup.mjs sync "$REPO_NAME" .
-          rm -rf .monorise-shared
+          SHARED_DIR="$RUNNER_TEMP/monorise-shared"
+          rm -rf "$SHARED_DIR"
+          mv .monorise-shared "$SHARED_DIR"
 
           STATUS=$(git status --porcelain)
 
@@ -176,6 +178,66 @@ jobs:
             PADDED=$(printf '%03d' "$ISSUE_NUMBER")
             FINAL_TITLE="🔧 Chore: [${PADDED}] ${TITLE_SUFFIX}"
           fi
+
+          # Uzupełnij pola zgłoszenia synchronizacji (Priority=Low, Effort=Low, Start/Target date=dziś, gdy puste) — best-effort.
+          SHARED_META_MODULE="$SHARED_DIR/scripts/lib/issue-meta.mjs" \
+          SYNC_REPO_NAME="$REPO_NAME" \
+          SYNC_ISSUE_NUMBER="$ISSUE_NUMBER" \
+          node --input-type=module <<'NODE' || echo "::warning::Nie udało się uzupełnić pól zgłoszenia #${ISSUE_NUMBER}."
+          import { execFileSync } from "node:child_process";
+          import { appendFileSync } from "node:fs";
+          import { pathToFileURL } from "node:url";
+
+          const meta = await import(pathToFileURL(process.env.SHARED_META_MODULE).href);
+          const repoName = process.env.SYNC_REPO_NAME;
+          const issueNumber = Number(process.env.SYNC_ISSUE_NUMBER);
+          const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+          const noteSummary = (line) => {
+            if (summaryFile) appendFileSync(summaryFile, `${line}\n`);
+          };
+          const gql = (query, variables) => {
+            const out = execFileSync("gh", ["api", "graphql", "-H", "GraphQL-Features: issue_fields", "--input", "-"], {
+              encoding: "utf8",
+              input: JSON.stringify({ query, variables }),
+              stdio: ["pipe", "pipe", "pipe"],
+            });
+            const parsed = JSON.parse(out || "{}");
+            if (parsed.errors?.length) {
+              throw new Error(parsed.errors.map((e) => e.message).join("; "));
+            }
+            return parsed.data;
+          };
+
+          try {
+            const orgData = gql(meta.ORG_ISSUE_FIELDS_QUERY, { org: meta.ORG });
+            const orgFields = meta.indexOrgIssueFields(orgData?.organization);
+            const issueData = gql(meta.ISSUE_FIELD_VALUES_QUERY, {
+              owner: meta.ORG,
+              repo: repoName,
+              number: issueNumber,
+            });
+            const issueNode = issueData?.repository?.issue;
+            if (!issueNode?.id) {
+              noteSummary(`- Pola zgłoszenia #${issueNumber}: pominięto (nie znaleziono zgłoszenia).`);
+            } else {
+              const currentFields = meta.extractCurrentFieldValues(issueNode.issueFieldValues?.nodes || []);
+              const updates = meta.planSyncIssueFieldUpdates({ currentFields });
+              const { inputs, applied, skipped } = meta.buildSetIssueFieldsInput(updates, orgFields);
+              if (inputs.length) {
+                gql(meta.SET_ISSUE_FIELD_VALUE_MUTATION, { issueId: issueNode.id, issueFields: inputs });
+                noteSummary(`- Pola zgłoszenia #${issueNumber}: ${applied.map((a) => `\`${a}\``).join(", ")}.`);
+              } else {
+                noteSummary(`- Pola zgłoszenia #${issueNumber}: bez zmian (już uzupełnione).`);
+              }
+              if (skipped.length) {
+                noteSummary(`- Pominięte pola zgłoszenia #${issueNumber}: ${skipped.join(", ")}.`);
+              }
+            }
+          } catch (error) {
+            console.log(`::warning::pola zgłoszenia #${issueNumber}: ${error.message}`);
+            noteSummary(`- ⚠️ Pola zgłoszenia #${issueNumber}: pominięto (${error.message}).`);
+          }
+          NODE
 
           BRANCH="flow/chore/${PADDED}-sync-shared-files"
           if [ -z "$REUSED_BRANCH" ]; then
