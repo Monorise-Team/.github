@@ -123,6 +123,22 @@
         "description": "@monorise-team/permissions: uprawnienia i zakresy"
       },
       {
+        "name": "events",
+        "description": "Biblioteka zdarzeń: koperta, schematy, outbox i odbiorcy"
+      },
+      {
+        "name": "sdk",
+        "description": "Typowany klient Core API"
+      },
+      {
+        "name": "testing",
+        "description": "Testy zgodności produktów z kontraktem"
+      },
+      {
+        "name": "utils",
+        "description": "Drobne wspólne narzędzia"
+      },
+      {
         "name": "playground",
         "description": "Katalog komponentów apps/playground"
       },
