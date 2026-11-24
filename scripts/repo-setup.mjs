@@ -29,6 +29,12 @@
  *   node scripts/repo-setup.mjs audit [--markdown <plik>]
  *       sprawdza repozytoria organizacji na GitHubie przeciwko labels/repos.json (brakujące wpisy, nieistniejące
  *       repozytoria, rozbieżności About, brak .github/workflows/sync-shared.yml); kończy się błędem przy uwagach
+ *   node scripts/repo-setup.mjs meta <Repo> [--issue <n>] [--dry-run] [--start YYYY-MM-DD] [--target YYYY-MM-DD]
+ *       [--priority Urgent|High|Medium|Low] [--effort High|Medium|Low] [--blocked-by <ref>] [--parent <ref>]
+ *       [--branch <nazwa>]
+ *       uzupełnia metadane zgłoszeń i pull requestów (typ, Priority, Effort, Start/Target date, milestone,
+ *       relacje z „Zależności”, etykiety i osobę przypisaną PR); bez --issue robi pełny backfill repozytorium,
+ *       z --issue działa na jednym zgłoszeniu i pozwala ręcznie podać pola, relacje oraz gałąź (--branch)
  *
  * Polecenia odwołujące się do GitHuba wymagają zalogowanego `gh` (dla labels/protect/about z uprawnieniem admina).
  */
@@ -47,6 +53,33 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  ADD_BLOCKED_BY_MUTATION,
+  ADD_SUB_ISSUE_MUTATION,
+  CREATE_LINKED_BRANCH_MUTATION,
+  ISSUE_NODE_ID_QUERY,
+  ORG_ISSUE_FIELDS_QUERY,
+  REPO_BRANCH_OID_QUERY,
+  SET_ISSUE_FIELD_VALUE_MUTATION,
+  VALID_EFFORTS,
+  VALID_PRIORITIES,
+  buildSetIssueFieldsInput,
+  extractCurrentFieldValues,
+  findNearestOpenMilestone,
+  findNewestReleaseTag,
+  formatIssueRef,
+  indexOrgIssueFields,
+  isBotAuthor,
+  isSyncIssue,
+  isValidYmd,
+  issueRefKey,
+  parseIssueRef,
+  parseRelations,
+  planIssueFieldUpdates,
+  planPullRequestUpdates,
+  resolveIssueType,
+  shouldAssignMilestone,
+} from "./lib/issue-meta.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ORG = "Monorise-Team";
@@ -742,22 +775,694 @@ function audit({ markdownPath }) {
   return problems.length > 0 ? 1 : 0;
 }
 
+// ── Metadane zgłoszeń i pull requestów ──────────────────────────────────────
+
+function ghGraphql(query, variables = {}, { allowErrors = false } = {}) {
+  const res = ghJson(["api", "graphql", "--input", "-"], {
+    input: JSON.stringify({ query, variables }),
+  });
+  if (!allowErrors && res?.errors?.length) {
+    throw new Error(res.errors.map((e) => e.message).join("; "));
+  }
+  return res;
+}
+
+const ISSUE_META_FRAGMENT = `
+  id
+  number
+  title
+  body
+  state
+  stateReason
+  createdAt
+  closedAt
+  author {
+    __typename
+    login
+  }
+  assignees(first: 10) {
+    nodes {
+      login
+    }
+  }
+  issueType {
+    name
+  }
+  milestone {
+    number
+    title
+    state
+  }
+  labels(first: 50) {
+    nodes {
+      name
+    }
+  }
+  issueFieldValues(first: 20) {
+    nodes {
+      ... on IssueFieldSingleSelectValue {
+        name
+        field {
+          ... on IssueFieldSingleSelect {
+            name
+          }
+        }
+      }
+      ... on IssueFieldDateValue {
+        value
+        field {
+          ... on IssueFieldDate {
+            name
+          }
+        }
+      }
+    }
+  }
+  blockedBy(first: 50) {
+    nodes {
+      number
+      repository {
+        name
+        owner {
+          login
+        }
+      }
+    }
+  }
+  parent {
+    number
+    repository {
+      name
+      owner {
+        login
+      }
+    }
+  }
+  linkedBranches(first: 20) {
+    nodes {
+      ref {
+        name
+      }
+    }
+  }
+`;
+
+const REPO_META_CONTEXT_QUERY = `
+  query($owner: String!, $repo: String!) {
+    repository(owner: $owner, name: $repo) {
+      id
+      milestones(states: [OPEN], first: 100) {
+        nodes {
+          number
+          title
+          state
+        }
+      }
+    }
+  }
+`;
+
+const REPO_TAGS_PAGE_QUERY = `
+  query($owner: String!, $repo: String!, $cursor: String) {
+    repository(owner: $owner, name: $repo) {
+      refs(refPrefix: "refs/tags/", first: 100, after: $cursor, orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          name
+          target {
+            __typename
+            ... on Commit {
+              committedDate
+            }
+            ... on Tag {
+              tagger {
+                date
+              }
+              target {
+                ... on Commit {
+                  committedDate
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const SINGLE_ISSUE_META_QUERY = `
+  query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      issue(number: $number) {
+        ${ISSUE_META_FRAGMENT}
+      }
+    }
+  }
+`;
+
+const REPO_ISSUES_META_PAGE_QUERY = `
+  query($owner: String!, $repo: String!, $cursor: String) {
+    repository(owner: $owner, name: $repo) {
+      issues(first: 50, after: $cursor, orderBy: { field: CREATED_AT, direction: ASC }) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          ${ISSUE_META_FRAGMENT}
+        }
+      }
+    }
+  }
+`;
+
+const REPO_PRS_META_PAGE_QUERY = `
+  query($owner: String!, $repo: String!, $cursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequests(first: 50, after: $cursor, orderBy: { field: CREATED_AT, direction: ASC }) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          number
+          state
+          headRefName
+          author {
+            __typename
+            login
+          }
+          assignees(first: 10) {
+            nodes {
+              login
+            }
+          }
+          milestone {
+            number
+            title
+            state
+          }
+          labels(first: 50) {
+            nodes {
+              name
+            }
+          }
+          closingIssuesReferences(first: 20) {
+            nodes {
+              number
+              repository {
+                name
+                owner {
+                  login
+                }
+              }
+              milestone {
+                number
+                title
+                state
+              }
+              labels(first: 50) {
+                nodes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+function fetchAllRepoTags(repo) {
+  const tags = [];
+  let cursor = null;
+  while (true) {
+    const res = ghGraphql(REPO_TAGS_PAGE_QUERY, { owner: ORG, repo, cursor });
+    const conn = res?.data?.repository?.refs;
+    if (!conn) break;
+    tags.push(...(conn.nodes || []));
+    if (!conn.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return tags;
+}
+
+function fetchAllRepoIssues(repo) {
+  const issues = [];
+  let cursor = null;
+  while (true) {
+    const res = ghGraphql(REPO_ISSUES_META_PAGE_QUERY, { owner: ORG, repo, cursor });
+    const conn = res?.data?.repository?.issues;
+    if (!conn) break;
+    issues.push(...(conn.nodes || []));
+    if (!conn.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return issues;
+}
+
+function fetchAllRepoPullRequests(repo) {
+  const prs = [];
+  let cursor = null;
+  while (true) {
+    const res = ghGraphql(REPO_PRS_META_PAGE_QUERY, { owner: ORG, repo, cursor });
+    const conn = res?.data?.repository?.pullRequests;
+    if (!conn) break;
+    prs.push(...(conn.nodes || []));
+    if (!conn.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return prs;
+}
+
+function meta(
+  repo,
+  {
+    issueNumber = null,
+    dryRun = false,
+    start = null,
+    target = null,
+    priority = null,
+    effort = null,
+    blockedByRefs = [],
+    parentRef = null,
+    branch = null,
+  } = {},
+) {
+  settingsOf(repo);
+  const prefix = dryRun ? "[dry-run] " : "";
+  const stats = {
+    issuesChecked: 0,
+    issuesChanged: 0,
+    skippedBots: 0,
+    prsChecked: 0,
+    prsChanged: 0,
+    changes: 0,
+    warnings: 0,
+  };
+
+  let orgFields = new Map();
+  try {
+    const orgRes = ghGraphql(ORG_ISSUE_FIELDS_QUERY, { org: ORG });
+    orgFields = indexOrgIssueFields(orgRes?.data?.organization);
+  } catch (error) {
+    console.warn(`UWAGA: nie udało się pobrać pól zgłoszeń organizacji ${ORG}: ${error.message}`);
+    stats.warnings += 1;
+  }
+
+  const repoContext = ghGraphql(REPO_META_CONTEXT_QUERY, { owner: ORG, repo })?.data?.repository;
+  if (!repoContext) throw new Error(`Nie znaleziono repozytorium ${ORG}/${repo}`);
+  const nearestOpenMilestone = findNearestOpenMilestone(repoContext.milestones?.nodes || []);
+  const newestReleaseTag = findNewestReleaseTag(fetchAllRepoTags(repo));
+  const newestReleaseTagDate = newestReleaseTag?.date ?? null;
+
+  const nodeIdCache = new Map();
+  const resolveIssueNodeId = (ref) => {
+    const key = issueRefKey(ref);
+    if (nodeIdCache.has(key)) return nodeIdCache.get(key);
+    try {
+      const res = ghGraphql(
+        ISSUE_NODE_ID_QUERY,
+        { owner: ref.owner, repo: ref.repo, number: ref.number },
+        { allowErrors: true },
+      );
+      const id = res?.data?.repository?.issue?.id ?? null;
+      nodeIdCache.set(key, id);
+      return id;
+    } catch {
+      nodeIdCache.set(key, null);
+      return null;
+    }
+  };
+
+  const assignedMilestones = new Map();
+  const overrides = {
+    ...(start ? { start } : {}),
+    ...(target ? { target } : {}),
+    ...(priority ? { priority } : {}),
+    ...(effort ? { effort } : {}),
+  };
+
+  const processIssue = (issue, { extraBlockedBy = [], extraParents = [], linkBranch = null } = {}) => {
+    stats.issuesChecked += 1;
+    let issueTouched = false;
+    const tag = `${repo}#${issue.number}`;
+    const isSync = isSyncIssue(issue);
+    const labelNames = (issue.labels?.nodes || []).map((l) => l.name);
+    const noteChange = (line) => {
+      console.log(`${prefix}${tag}: ${line}`);
+      stats.changes += 1;
+      issueTouched = true;
+    };
+    const noteWarn = (line) => {
+      console.warn(`UWAGA: ${tag}: ${line}`);
+      stats.warnings += 1;
+    };
+
+    // 1. Osoba przypisana (tylko ludzie, gdy puste)
+    if (!(issue.assignees?.nodes || []).length && issue.author?.__typename === "User" && issue.author.login) {
+      noteChange(`osoba przypisana -> ${issue.author.login}`);
+      if (!dryRun) {
+        try {
+          gh(["api", "-X", "POST", `repos/${ORG}/${repo}/issues/${issue.number}/assignees`, "--input", "-"], {
+            input: JSON.stringify({ assignees: [issue.author.login] }),
+          });
+        } catch (error) {
+          noteWarn(`nie udało się przypisać ${issue.author.login}: ${error.message}`);
+        }
+      }
+    }
+
+    // 2. Typ zgłoszenia organizacji
+    if (!issue.issueType?.name) {
+      const wantedType = resolveIssueType(labelNames);
+      noteChange(`typ -> ${wantedType}`);
+      if (!dryRun) {
+        try {
+          gh(["api", "-X", "PATCH", `repos/${ORG}/${repo}/issues/${issue.number}`, "-f", `type=${wantedType}`]);
+        } catch (error) {
+          noteWarn(`nie udało się ustawić typu ${wantedType}: ${error.message}`);
+        }
+      }
+    }
+
+    // 3. Pola zgłoszeń (Priority, Effort, Start date, Target date)
+    const currentFields = extractCurrentFieldValues(issue.issueFieldValues?.nodes || []);
+    const { updates } = planIssueFieldUpdates({
+      body: issue.body,
+      labels: labelNames,
+      state: issue.state,
+      createdAt: issue.createdAt,
+      closedAt: issue.closedAt,
+      currentFields,
+      isSync,
+      overrides,
+    });
+    const { inputs, applied, skipped } = buildSetIssueFieldsInput(updates, orgFields);
+    for (const reason of skipped) noteWarn(`pominięto pole ${reason}`);
+    if (inputs.length) {
+      noteChange(`pola -> ${applied.join(", ")}`);
+      if (!dryRun) {
+        try {
+          ghGraphql(SET_ISSUE_FIELD_VALUE_MUTATION, { issueId: issue.id, issueFields: inputs });
+        } catch (error) {
+          noteWarn(`nie udało się zapisać pól (${applied.join(", ")}): ${error.message}`);
+        }
+      }
+    }
+
+    // 4. Milestone
+    if (nearestOpenMilestone && shouldAssignMilestone(issue, { newestReleaseTagDate })) {
+      noteChange(`milestone -> ${nearestOpenMilestone.title}`);
+      assignedMilestones.set(issue.number, nearestOpenMilestone);
+      if (!dryRun) {
+        try {
+          gh([
+            "api",
+            "-X",
+            "PATCH",
+            `repos/${ORG}/${repo}/issues/${issue.number}`,
+            "-F",
+            `milestone=${nearestOpenMilestone.number}`,
+          ]);
+        } catch (error) {
+          noteWarn(`nie udało się ustawić milestone ${nearestOpenMilestone.title}: ${error.message}`);
+        }
+      }
+    }
+
+    // 5. Relacje z „Zależności” + opcje CLI
+    const parsedRelations = parseRelations(issue.body, {
+      defaultOwner: ORG,
+      defaultRepo: repo,
+      selfNumber: issue.number,
+    });
+    const selfKey = issueRefKey({ owner: ORG, repo, number: issue.number });
+
+    const mergeUniqueRefs = (first, second) => {
+      const seen = new Set();
+      const out = [];
+      for (const ref of [...first, ...second]) {
+        const key = issueRefKey(ref);
+        if (key === selfKey || seen.has(key)) continue;
+        seen.add(key);
+        out.push(ref);
+      }
+      return out;
+    };
+
+    const existingBlocked = new Set(
+      (issue.blockedBy?.nodes || [])
+        .filter((n) => n?.number && n?.repository?.name && n?.repository?.owner?.login)
+        .map((n) => issueRefKey({ owner: n.repository.owner.login, repo: n.repository.name, number: n.number })),
+    );
+    const existingParentKey =
+      issue.parent?.number && issue.parent?.repository?.name && issue.parent?.repository?.owner?.login
+        ? issueRefKey({
+            owner: issue.parent.repository.owner.login,
+            repo: issue.parent.repository.name,
+            number: issue.parent.number,
+          })
+        : null;
+
+    for (const ref of mergeUniqueRefs(parsedRelations.blockedBy, extraBlockedBy)) {
+      if (existingBlocked.has(issueRefKey(ref))) continue;
+      const label = formatIssueRef(ref, { defaultOwner: ORG, defaultRepo: repo });
+      noteChange(`blokowane przez ${label}`);
+      if (!dryRun) {
+        const blockingIssueId = resolveIssueNodeId(ref);
+        if (!blockingIssueId) {
+          noteWarn(`nie znaleziono ${label} (albo brak dostępu do repozytorium)`);
+          continue;
+        }
+        try {
+          ghGraphql(ADD_BLOCKED_BY_MUTATION, { issueId: issue.id, blockingIssueId });
+        } catch (error) {
+          if (!/already|duplicate|exists/i.test(error.message || "")) {
+            noteWarn(`nie udało się dodać blokowane przez ${label}: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    for (const ref of mergeUniqueRefs(parsedRelations.parents, extraParents)) {
+      if (existingParentKey === issueRefKey(ref)) continue;
+      const label = formatIssueRef(ref, { defaultOwner: ORG, defaultRepo: repo });
+      noteChange(`etap ${label}`);
+      if (!dryRun) {
+        const parentId = resolveIssueNodeId(ref);
+        if (!parentId) {
+          noteWarn(`nie znaleziono ${label} (albo brak dostępu do repozytorium)`);
+          continue;
+        }
+        try {
+          ghGraphql(ADD_SUB_ISSUE_MUTATION, { parentId, subIssueId: issue.id });
+        } catch (error) {
+          if (!/already|duplicate|exists/i.test(error.message || "")) {
+            noteWarn(`nie udało się dodać etapu ${label}: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    // 6. Gałąź rozwojowa (--branch, tylko z --issue, best-effort)
+    if (linkBranch) {
+      const linkedNames = new Set((issue.linkedBranches?.nodes || []).map((n) => n?.ref?.name).filter(Boolean));
+      if (linkedNames.has(linkBranch)) {
+        console.log(`${tag}: gałąź ${linkBranch} jest już powiązana`);
+      } else {
+        const refData = ghGraphql(
+          REPO_BRANCH_OID_QUERY,
+          { owner: ORG, repo, ref: `refs/heads/${linkBranch}` },
+          { allowErrors: true },
+        )?.data?.repository;
+        const oid = refData?.ref?.target?.oid ?? null;
+        if (!oid) {
+          noteWarn(`gałąź ${linkBranch} nie istnieje w ${ORG}/${repo} — nie tworzę nowej gałęzi`);
+        } else {
+          noteChange(`gałąź -> ${linkBranch}`);
+          if (!dryRun) {
+            try {
+              const created = ghGraphql(CREATE_LINKED_BRANCH_MUTATION, {
+                issueId: issue.id,
+                name: linkBranch,
+                oid,
+                repositoryId: refData.id || repoContext.id,
+              });
+              const createdName = created?.data?.createLinkedBranch?.linkedBranch?.ref?.name;
+              if (createdName && createdName !== linkBranch) {
+                noteWarn(`GitHub powiązał gałąź pod inną nazwą: ${createdName}`);
+              }
+            } catch (error) {
+              noteWarn(`nie udało się powiązać gałęzi ${linkBranch}: ${error.message}`);
+            }
+          }
+        }
+      }
+    }
+
+    if (issueTouched) stats.issuesChanged += 1;
+  };
+
+  if (issueNumber !== null) {
+    const res = ghGraphql(
+      SINGLE_ISSUE_META_QUERY,
+      { owner: ORG, repo, number: issueNumber },
+      { allowErrors: true },
+    );
+    const issue = res?.data?.repository?.issue;
+    if (!issue) {
+      throw new Error(`Nie znaleziono zgłoszenia #${issueNumber} w ${ORG}/${repo}`);
+    }
+    processIssue(issue, {
+      extraBlockedBy: blockedByRefs,
+      extraParents: parentRef ? [parentRef] : [],
+      linkBranch: branch,
+    });
+  } else {
+    const allIssues = fetchAllRepoIssues(repo);
+    for (const issue of allIssues) {
+      if (isBotAuthor(issue.author) && !isSyncIssue(issue)) {
+        stats.skippedBots += 1;
+        continue;
+      }
+      nodeIdCache.set(issueRefKey({ owner: ORG, repo, number: issue.number }), issue.id);
+      processIssue(issue);
+    }
+
+    const repoLabels = new Set(
+      (ghJson(["api", `repos/${ORG}/${repo}/labels?per_page=100`, "--paginate"]) || []).map((l) => l.name),
+    );
+    const allPrs = fetchAllRepoPullRequests(repo);
+    for (const pr of allPrs) {
+      stats.prsChecked += 1;
+      const plan = planPullRequestUpdates(pr, {
+        repoOwner: ORG,
+        repoName: repo,
+        repoLabels,
+        nearestOpenMilestone,
+        assignedMilestones,
+      });
+      let prTouched = false;
+      const tag = `${repo} PR#${pr.number}`;
+
+      if (plan.addLabels.length) {
+        console.log(`${prefix}${tag}: etykiety -> +${plan.addLabels.join(", ")}`);
+        stats.changes += 1;
+        prTouched = true;
+        if (!dryRun) {
+          try {
+            gh(["api", "-X", "POST", `repos/${ORG}/${repo}/issues/${pr.number}/labels`, "--input", "-"], {
+              input: JSON.stringify({ labels: plan.addLabels }),
+            });
+          } catch (error) {
+            console.warn(`UWAGA: ${tag}: nie udało się dodać etykiet: ${error.message}`);
+            stats.warnings += 1;
+          }
+        }
+      }
+
+      if (plan.milestone) {
+        console.log(`${prefix}${tag}: milestone -> ${plan.milestone.title}`);
+        stats.changes += 1;
+        prTouched = true;
+        if (!dryRun) {
+          try {
+            gh([
+              "api",
+              "-X",
+              "PATCH",
+              `repos/${ORG}/${repo}/issues/${pr.number}`,
+              "-F",
+              `milestone=${plan.milestone.number}`,
+            ]);
+          } catch (error) {
+            console.warn(`UWAGA: ${tag}: nie udało się ustawić milestone: ${error.message}`);
+            stats.warnings += 1;
+          }
+        }
+      }
+
+      if (plan.assignee) {
+        console.log(`${prefix}${tag}: osoba przypisana -> ${plan.assignee}`);
+        stats.changes += 1;
+        prTouched = true;
+        if (!dryRun) {
+          try {
+            gh(["api", "-X", "POST", `repos/${ORG}/${repo}/issues/${pr.number}/assignees`, "--input", "-"], {
+              input: JSON.stringify({ assignees: [plan.assignee] }),
+            });
+          } catch (error) {
+            console.warn(`UWAGA: ${tag}: nie udało się przypisać ${plan.assignee}: ${error.message}`);
+            stats.warnings += 1;
+          }
+        }
+      }
+
+      if (prTouched) stats.prsChanged += 1;
+    }
+  }
+
+  const mode = dryRun ? ", dry-run" : "";
+  const prSummary =
+    issueNumber === null ? `, pull requesty ${stats.prsChecked} (zmienione ${stats.prsChanged})` : "";
+  console.log(
+    `Podsumowanie meta (${repo}${mode}): zgłoszenia ${stats.issuesChecked} (zmienione ${stats.issuesChanged}, pominięte boty ${stats.skippedBots})${prSummary}, zmiany ${stats.changes}, ostrzeżenia ${stats.warnings}.`,
+  );
+  return 0;
+}
+
 // ── Wywołanie ───────────────────────────────────────────────────────────────
+
+const VALUE_OPTIONS = new Set([
+  "--markdown",
+  "--issue",
+  "--start",
+  "--target",
+  "--priority",
+  "--effort",
+  "--blocked-by",
+  "--parent",
+  "--branch",
+]);
+const REPEATABLE_OPTIONS = new Set(["--blocked-by"]);
 
 const rawArgs = process.argv.slice(2);
 const flags = new Set();
 const options = new Map();
+const multiOptions = new Map();
 const positional = [];
 for (let i = 0; i < rawArgs.length; i += 1) {
   const arg = rawArgs[i];
-  if (arg === "--markdown") {
-    const next = rawArgs[i + 1];
-    if (!next || next.startsWith("--")) {
-      console.error("Brak ścieżki po --markdown");
+  let optName = arg;
+  let inlineVal = null;
+  const eq = arg.indexOf("=");
+  if (arg.startsWith("--") && eq !== -1) {
+    optName = arg.slice(0, eq);
+    inlineVal = arg.slice(eq + 1);
+  }
+
+  if (VALUE_OPTIONS.has(optName)) {
+    const val = inlineVal !== null ? inlineVal : rawArgs[i + 1];
+    if (!val || (inlineVal === null && val.startsWith("--"))) {
+      console.error(`Brak wartości po ${optName}`);
       process.exit(2);
     }
-    options.set("markdown", next);
-    i += 1;
+    const key = optName.slice(2);
+    if (REPEATABLE_OPTIONS.has(optName)) {
+      const list = multiOptions.get(key) || [];
+      list.push(val);
+      multiOptions.set(key, list);
+    } else {
+      options.set(key, val);
+    }
+    if (inlineVal === null) i += 1;
   } else if (arg.startsWith("--")) {
     flags.add(arg);
   } else {
@@ -776,6 +1481,9 @@ const usage = [
   "  protect <Repo> [--dry-run]",
   "  dispatch [<Repo>…]",
   "  audit [--markdown <plik>]",
+  "  meta <Repo> [--issue <n>] [--dry-run] [--start YYYY-MM-DD] [--target YYYY-MM-DD]",
+  "       [--priority Urgent|High|Medium|Low] [--effort High|Medium|Low]",
+  "       [--blocked-by <ref>] [--parent <ref>] [--branch <nazwa>]",
 ].join("\n");
 
 if (command === "forms" && repo && dir) {
@@ -797,6 +1505,78 @@ if (command === "forms" && repo && dir) {
   process.exit(dispatch(positional.slice(1)));
 } else if (command === "audit") {
   process.exit(audit({ markdownPath: options.get("markdown") }));
+} else if (command === "meta" && repo) {
+  const rawIssue = options.get("issue");
+  let issueNumber = null;
+  if (rawIssue !== undefined) {
+    if (!/^\d+$/.test(rawIssue) || Number(rawIssue) <= 0) {
+      console.error(`Nieprawidłowy numer zgłoszenia po --issue: ${rawIssue}`);
+      process.exit(2);
+    }
+    issueNumber = Number(rawIssue);
+  }
+  const start = options.get("start") ?? null;
+  const target = options.get("target") ?? null;
+  const priority = options.get("priority") ?? null;
+  const effort = options.get("effort") ?? null;
+  const branch = options.get("branch") ?? null;
+  const rawBlockedBy = multiOptions.get("blocked-by") ?? [];
+  const rawParent = options.get("parent") ?? null;
+
+  const hasSingleIssueFlag = Boolean(
+    start || target || priority || effort || branch || rawBlockedBy.length || rawParent,
+  );
+  if (hasSingleIssueFlag && issueNumber === null) {
+    console.error("Opcje --start, --target, --priority, --effort, --blocked-by, --parent i --branch wymagają --issue <n>.");
+    process.exit(2);
+  }
+  if (start && !isValidYmd(start)) {
+    console.error(`Nieprawidłowa data po --start (oczekiwano YYYY-MM-DD): ${start}`);
+    process.exit(2);
+  }
+  if (target && !isValidYmd(target)) {
+    console.error(`Nieprawidłowa data po --target (oczekiwano YYYY-MM-DD): ${target}`);
+    process.exit(2);
+  }
+  if (priority && !VALID_PRIORITIES.includes(priority)) {
+    console.error(`Nieprawidłowa wartość po --priority (${VALID_PRIORITIES.join("|")}): ${priority}`);
+    process.exit(2);
+  }
+  if (effort && !VALID_EFFORTS.includes(effort)) {
+    console.error(`Nieprawidłowa wartość po --effort (${VALID_EFFORTS.join("|")}): ${effort}`);
+    process.exit(2);
+  }
+  const blockedByRefs = [];
+  for (const raw of rawBlockedBy) {
+    const parsed = parseIssueRef(raw, { defaultOwner: ORG, defaultRepo: repo, allowBareNumber: true });
+    if (!parsed) {
+      console.error(`Nieprawidłowe odwołanie po --blocked-by: ${raw}`);
+      process.exit(2);
+    }
+    blockedByRefs.push(parsed);
+  }
+  let parentRef = null;
+  if (rawParent) {
+    parentRef = parseIssueRef(rawParent, { defaultOwner: ORG, defaultRepo: repo, allowBareNumber: true });
+    if (!parentRef) {
+      console.error(`Nieprawidłowe odwołanie po --parent: ${rawParent}`);
+      process.exit(2);
+    }
+  }
+
+  process.exit(
+    meta(repo, {
+      issueNumber,
+      dryRun: flags.has("--dry-run"),
+      start,
+      target,
+      priority,
+      effort,
+      blockedByRefs,
+      parentRef,
+      branch,
+    }),
+  );
 } else {
   console.error(usage);
   process.exit(2);
