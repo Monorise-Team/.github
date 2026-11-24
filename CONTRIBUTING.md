@@ -136,6 +136,17 @@ Typy: `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `security`, `s
 - Milestone = wydanie (`v0.2.0`). Po wydaniu otwiera się następny.
 - Wszystkie części produktu mają jedną wersję, a wszystkie paczki `@monorise-team/*` też jedną.
 
+### Wdrożenia ([ADR-0097](https://github.com/Monorise-Team/MonoriseDocumentation/blob/main/adr/ADR-0097-on-demand-preview.md))
+
+- **Produkcja** wdraża się tylko z `prod`, czyli po scaleniu pull requestu wydania. Środowisko „Production” w repozytorium.
+- **Podgląd** (na Vercel „Preview”, na AWS staging) wdraża się tylko z gałęzi-wskaźnika `preview`. Przesuwa ją wyłącznie workflow `deploy-preview.yml`, zawsze do przodu do commita z `dev` i nigdy przez force push:
+  - przy pull requeście wydania `dev → prod` (podgląd kandydata do wydania),
+  - na żądanie: „Run workflow” w Actions albo `gh workflow run deploy-preview.yml -R Monorise-Team/<Repo>` (opcjonalnie `-f ref=<commit z dev>`),
+  - po wypchnięciu oznaczenia `preview-<opis>` na commicie z `dev`.
+- `dev`, `flow/*` i gałęzie automatów nie wdrażają się. Zmiany przed scaleniem sprawdzasz lokalnie i w CI.
+- Na Vercel `vercel.json` włącza wdrożenia tylko dla `prod` i `preview` (`"git": { "deploymentEnabled": { "**": false, "prod": true, "preview": true } }`), a w projekcie są włączone wpisy wdrożeń na GitHubie. Wzór: MonoriseWebsite.
+- Na `preview` nikt nie commituje ręcznie. Gdy automat zgłosi, że nie da się jej przesunąć do przodu, opiekun ustawia ją raz na `dev`.
+
 ## 7. Dyskusje
 
 [Dyskusje organizacji](https://github.com/orgs/Monorise-Team/discussions) służą do rozmowy przed pracą i wokół niej. Są publiczne: bez sekretów, danych klientów i spraw firmowych.
@@ -201,7 +212,8 @@ Codzienny audyt w tym repozytorium (`node scripts/repo-setup.mjs audit`) porówn
 1. Nazwę, przeznaczenie i strukturę ustala właściciel projektu.
 2. W `Monorise-Team/.github` dodaj wpis w `labels/repos.json` (rodzaj, obszary, kontrole, opis, strona, tematy), a po scaleniu uruchom `node scripts/repo-setup.mjs` z poleceniami `labels`, `sync`, `about` i `protect`.
 3. W nowym repozytorium uzupełnij część o repozytorium w `AGENTS.md` (czym jest, polecenia, zasady kodu), `CLAUDE.md` z `@AGENTS.md`, `README.md`, dostęp do potrzebnych paczek `@monorise-team/*` oraz `renovate.json`.
-4. W `MonoriseDocumentation` dopisz repozytorium na liście repozytoriów i w karcie produktu.
+4. Jeśli repozytorium się wdraża: `vercel.json` albo wdrożenie na AWS i workflow `deploy-preview.yml` według punktu „Wdrożenia” (wzór: MonoriseWebsite), środowiska „Production” i „Preview” w repozytorium.
+5. W `MonoriseDocumentation` dopisz repozytorium na liście repozytoriów i w karcie produktu.
 
 ## Wspólne pliki
 
