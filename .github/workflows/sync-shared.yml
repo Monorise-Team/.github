@@ -53,6 +53,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Sync, open pull request and merge
         env:
@@ -265,6 +266,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Run organization audit and update issue
         env:
