@@ -307,5 +307,51 @@
       "prisma",
       "postgresql"
     ]
+  },
+  "MonorisePortal": {
+    "kind": "production",
+    "public": true,
+    "checks": [
+      "Format, lint, types, tests and build"
+    ],
+    "description": "MonorisePortal: panel klienta Monorise do zarządzania firmą, pracownikami, rolami i dostępem do aplikacji",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "nextjs",
+      "admin-panel",
+      "oauth2",
+      "bff"
+    ],
+    "areas": [
+      {
+        "name": "web",
+        "description": "Ekrany portal.monorise.studio (Next.js, BFF)"
+      },
+      {
+        "name": "auth",
+        "description": "Logowanie przez MonoriseCore i sesja BFF"
+      },
+      {
+        "name": "employees",
+        "description": "Pracownicy i zaproszenia"
+      },
+      {
+        "name": "structure",
+        "description": "Struktura firmy: jednostki i członkowie"
+      },
+      {
+        "name": "permissions",
+        "description": "Role, przypisania i dostęp do aplikacji"
+      },
+      {
+        "name": "organization",
+        "description": "Firma, domeny i przekazanie Ownera"
+      },
+      {
+        "name": "design",
+        "description": "Wygląd i ekrany"
+      }
+    ]
   }
 }
