@@ -31,22 +31,22 @@ Nie od kodu ani od gałęzi, tylko od zgłoszenia (issue) z formularza. Pustych 
 
 > **Podatność, którą da się wykorzystać, nie idzie przez zgłoszenie.** Zgłoś ją prywatnie: [SECURITY.md](SECURITY.md).
 
-Automat dopisuje do tytułu typ i numer (`🐛 Bugfix: [009] Problem z załącznikami`), nakłada etykiety z formularza, przypisuje autora, typ zgłoszenia, pola organizacji, relacje i milestone najbliższego wydania, a kartę dodaje na tablicę „Monorise”.
+Formularz od razu ustawia typ zgłoszenia, a automat dopisuje do tytułu typ i numer (`🐛 Bugfix: [009] Problem z załącznikami`), przy wyborze „Wydajność” lub „Testy” zmienia typ na `Performance` albo `Test`, nakłada etykiety `area:` z formularza, przypisuje autora, uzupełnia pola organizacji, relacje i milestone najbliższego wydania oraz dodaje kartę na tablicę „Monorise”.
 
 ### Pola zgłoszeń, zależności i polecenie `meta`
 
-Każde zgłoszenie ma zestaw pól organizacji (Issue fields) oraz metadanych w panelu bocznym:
+Każde zgłoszenie ma typ i zestaw pól organizacji (Issue types i Issue fields) oraz metadane w panelu bocznym:
 
 | Pole | Wartości | Jak uzupełnia je automat |
 | --- | --- | --- |
-| `Priority` | `Urgent`, `High`, `Medium`, `Low` | z sekcji „Priorytet” albo etykiety `prio:`: `P0-critical` → `Urgent`, `P1-high` → `High`, `P2-medium` → `Medium`, `P3-low` → `Low` |
+| Typ zgłoszenia | `Feature`, `Bug`, `Refactor`, `Performance`, `Chore`, `Docs`, `Test`, `Security`, `Spike` | ustawia formularz; automat zmienia `Refactor` → `Performance` („Wydajność”) i `Chore` → `Test` („Testy”) oraz uzupełnia brakujący typ (np. `Chore` w zgłoszeniach synchronizacji) |
+| `Priority` | `Urgent`, `High`, `Medium`, `Low` | z sekcji „Priorytet” w formularzu: `P0-critical` → `Urgent`, `P1-high` → `High`, `P2-medium` → `Medium`, `P3-low` → `Low` |
 | `Effort` | `Low`, `Medium`, `High` | z sekcji „Nakład pracy”: `Mały` → `Low`, `Średni` → `Medium`, `Duży` → `High`; przy braku odpowiedzi `Medium` |
 | `Start date` | data `YYYY-MM-DD` | gdy puste: dzień założenia zgłoszenia (strefa `Europe/Warsaw`); pilnuje tego też automat pull requestów przy zamykanym zgłoszeniu |
 | `Target date` | data `YYYY-MM-DD` | gdy puste: dla otwartego `Start date` + 0 dni (`Low`), + 2 dni (`Medium`) albo + 7 dni (`High`); dla zamkniętego dzień zamknięcia |
-| Typ zgłoszenia | `Bug`, `Feature`, `Task` | z etykiety `type:` (`bugfix` i `security` → `Bug`, `feature` → `Feature`, reszta → `Task`) |
 | Milestone | najbliższe otwarte `vX.Y.Z` | gdy brak (zamknięte jako `not planned` nie dostają milestone) |
 
-Automat (`issue-automation.yml`) nie nadpisuje raz ustawionych dat, a `Priority` i `Effort` aktualizuje przy edycji treści zgłoszenia. W zgłoszeniach automatycznej synchronizacji (`sync-shared.yml`) ustawia `Priority: Low`, `Effort: Low` oraz `Start date` i `Target date` na bieżący dzień (gdy puste).
+Automat (`issue-automation.yml`) nie nadpisuje raz ustawionych dat, a `Priority`, `Effort` oraz typ dla „Wydajność”/„Testy” aktualizuje przy edycji treści zgłoszenia. W zgłoszeniach automatycznej synchronizacji (`sync-shared.yml`) ustawia typ `Chore`, `Priority: Low`, `Effort: Low` oraz `Start date` i `Target date` na bieżący dzień (gdy puste).
 
 W sekcji **„Zależności”** wpisujesz relacje, po jednej linii na typ (wiele odwołań w jednej linii rozdziel przecinkami):
 
@@ -75,7 +75,7 @@ node scripts/repo-setup.mjs meta MonoriseShared --issue 18 \
   --blocked-by MonoriseCore#13 --parent #4
 ```
 
-Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`/`prio:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola i dopisać relacje (`--blocked-by`, `--parent`).
+Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola i dopisać relacje (`--blocked-by`, `--parent`).
 
 **Gałąź w sekcji „Development”:** GitHub nie pozwala podpiąć pod zgłoszenie już istniejącej gałęzi przez API (`createLinkedBranch` tworzy wyłącznie nową gałąź). Żeby gałąź była widoczna w „Development”, załóż ją najpierw ze zgłoszenia:
 
@@ -85,12 +85,26 @@ gh issue develop <n> --base <base> --name flow/<typ>/<nnn>-<opis>
 
 Przy delegowaniu zadania przez Relay Bridge utwórz lokalny `git worktree` tej gałęzi i przekaż go do zlecenia z `isolation: "in_place"`.
 
-## 2. Etykiety
+## 2. Typy, pola i etykiety
 
-- **`type:`** (jedna): `✨ feature` · `🐛 bugfix` · `♻️ refactor` · `⚡ perf` · `🔧 chore` · `📚 docs` · `🧪 test` · `🔒 security` · `🔍 spike`
-- **`area:`** (może być kilka): obszary repozytorium, np. `web`, `desktop`, `mobile`.
-- **`prio:`**: `P0-critical` (produkcja leży albo dane są zagrożone) · `P1-high` (blokuje milestone) · `P2-medium` (poczeka) · `P3-low` (kosmetyka)
-- **`meta:`**: `❓ needs triage` · `🚧 blocked` · `💬 needs discussion` · `💥 breaking change` · `🗑️ wontfix` · `♊ duplicate`
+Nie używamy już etykiet `type:`, `prio:` ani `meta:` — ich rolę przejęły wbudowane funkcje GitHuba:
+
+- **Typ zgłoszenia (Issue type)**: `Feature` · `Bug` · `Refactor` · `Performance` · `Chore` · `Docs` · `Test` · `Security` · `Spike` (ustawia formularz, a przy „Wydajność” i „Testy” poprawia automat).
+- **Pola zgłoszeń (Issue fields)**: `Priority` (`Urgent` — produkcja leży albo dane są zagrożone, `High` — blokuje milestone, `Medium` — poczeka, `Low` — kosmetyka), `Effort` (`High`/`Medium`/`Low`), `Start date` i `Target date`. Priorytet żyje wyłącznie w polu `Priority`.
+- **Pull requesty**: GitHub nie obsługuje typów ani pól na pull requestach — typ pull requestu wynika z nazwy gałęzi i tytułu, a priorytet i obszar ze zgłoszenia powiązanego przez `Closes #<numer>`. Na pull requeście zostają tylko etykiety `area:` oraz etykiety narzędziowe poniżej.
+- **Etykiety, które zostają**:
+  - **`area:`** (może być kilka): obszary repozytorium z `labels/repos.json`, np. `area: web`, `area: desktop`, `area: mobile`; kopiowane ze zgłoszenia na pull request.
+  - **`dependencies`**: aktualizacje zależności (Renovate).
+  - **`good first issue`** i **`help wanted`**: zadania na start dla nowej osoby albo otwarte do wzięcia z zewnątrz.
+  - **`autorelease: pending`** i **`autorelease: tagged`**: zarządza nimi wyłącznie Release Please; polecenie `labels` nigdy ich nie tworzy ani nie usuwa, a wszystkie pozostałe zbędne etykiety usuwa.
+- **Co zastępuje dawne etykiety `meta:`**:
+  - zablokowane → relacja **„Blocked by”** (`Czeka na:` w formularzu albo `--blocked-by` w `meta`);
+  - nie będzie robione / duplikat → powód zamknięcia zgłoszenia (**„not planned”** albo **„duplicate”**);
+  - zmiana łamiąca zgodność → `!` w nagłówku Conventional Commits (albo stopka `BREAKING CHANGE:`), którą rozpoznaje Release Please;
+  - wymaga dyskusji → wątek w [Dyskusjach organizacji](https://github.com/orgs/Monorise-Team/discussions);
+  - brak triage → niepotrzebne, bo formularze wymagają typu, priorytetu i obszaru.
+
+Do jednorazowego posprzątania starych etykiet ze zgłoszeń i pull requestów służy `node scripts/repo-setup.mjs migrate-labels <Repo|--all> [--dry-run]`, a do wyczyszczenia definicji etykiet w repozytorium — `node scripts/repo-setup.mjs labels <Repo> [--dry-run]`.
 
 ## 3. Gałąź
 
@@ -124,7 +138,7 @@ Typy: `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `security`, `s
 
 - Do `dev` (albo `main`), według szablonu, z `Closes #<numer>`.
 - Sekcja **„Dla użytkowników”** po polsku i angielsku, prostym językiem; z niej powstaje opis wydania. „-”, gdy zmiany nie widać.
-- Wystarczy wpisać sam opis: automat dokleja do tytułu typ i numer z nazwy gałęzi, etykiety i milestone.
+- Wystarczy wpisać sam opis: automat dokleja do tytułu typ i numer z nazwy gałęzi, etykiety `area:` i milestone ze zgłoszenia.
 - Przed wysłaniem `pnpm check` na czystym drzewie roboczym.
 - Scalamy zwykłym scaleniem (merge commit), **nigdy przez squash**.
 - Kartę na tablicy przesuwasz do 🛠️ In Progress przy założeniu gałęzi i do 👀 Code Review przy otwarciu pull requestu; scalenie zamyka zgłoszenie i karta trafia do ✅ Done.
@@ -205,7 +219,7 @@ Raz dziennie (oraz ręcznie poleceniem `dispatch`) workflow `.github/workflows/s
 
 ### Audyt repozytoriów organizacji
 
-Codzienny audyt w tym repozytorium (`node scripts/repo-setup.mjs audit`) porównuje repozytoria organizacji z `labels/repos.json`: wyłapuje brakujące wpisy, nieistniejące repozytoria, rozbieżności w opisie, stronie i tematach („About”) oraz brak pliku `.github/workflows/sync-shared.yml` na gałęzi domyślnej. Gdy wykryje uwagi, otwiera albo aktualizuje jedno zgłoszenie `🔧 Chore: Audyt repozytoriów organizacji`; gdy wszystko jest zgodne, zamyka je.
+Codzienny audyt w tym repozytorium (`node scripts/repo-setup.mjs audit`) porównuje repozytoria organizacji z `labels/repos.json`: wyłapuje brakujące wpisy, nieistniejące repozytoria, rozbieżności w opisie, stronie i tematach („About”), pozostałe stare etykiety `type:`/`prio:`/`meta:` oraz brak pliku `.github/workflows/sync-shared.yml` na gałęzi domyślnej. Gdy wykryje uwagi, otwiera albo aktualizuje jedno zgłoszenie `🔧 Chore: Audyt repozytoriów organizacji` (z typem `Chore` i priorytetem `Low`); gdy wszystko jest zgodne, zamyka je.
 
 > Audyt w GitHub Actions działa z domyślnym tokenem `GITHUB_TOKEN`, który nie widzi repozytoriów prywatnych (np. `MonoriseDocumentation`). Wpisy z `"public": false` w `labels/repos.json` są wtedy pomijane po cichu — dla repozytoriów prywatnych uruchamiaj `audit` i `about` lokalnie z własnym zalogowanym `gh`.
 

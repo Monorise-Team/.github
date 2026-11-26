@@ -9,21 +9,22 @@ Wspólne pliki organizacji Monorise:
 | `templates/` | wzorce formularzy zgłoszeń i szablonu pull requestu |
 | `.github/DISCUSSION_TEMPLATE/` | formularze kategorii [dyskusji organizacji](https://github.com/orgs/Monorise-Team/discussions) (Architektura (RFC), Pytania i odpowiedzi); zasady w CONTRIBUTING, punkt 7 |
 | `templates/agents/` | wzorce wspólnych zasad dla agentów AI (`shared.md`, `GEMINI.md`, `copilot-instructions.md`, `sync-shared.yml`) |
-| `labels/` | etykiety wspólne (`common.json`) oraz obszary, ustawienia i dane „About” każdego repozytorium (`repos.json`) |
+| `labels/` | wspólne etykiety (`common.json`: `dependencies`, `good first issue`, `help wanted`) oraz obszary `area:`, ustawienia i dane „About” każdego repozytorium (`repos.json`) |
 | `.github/workflows/` | automaty zgłoszeń i pull requestów, powrót `prod` do `dev`, synchronizacja wspólnych plików (`sync-shared.yml`) i audyt organizacji |
-| `scripts/repo-setup.mjs` | rozsyła formularze, pliki agentów, etykiety, dane „About”, ustawienia (także uprawnienia GitHub Actions) i reguły ochrony gałęzi; uzupełnia metadane zgłoszeń i PR (`meta`), uruchamia synchronizację i audyt |
+| `scripts/repo-setup.mjs` | rozsyła formularze, pliki agentów, etykiety (usuwa zbędne poza `autorelease:*`), dane „About”, ustawienia (także uprawnienia GitHub Actions) i reguły ochrony gałęzi; uzupełnia metadane zgłoszeń i PR (`meta`), migruje stare etykiety (`migrate-labels`), uruchamia synchronizację i audyt |
 | `renovate-config.json` | wspólne ustawienia Renovate: `"extends": ["github>Monorise-Team/.github:renovate-config"]` w `renovate.json` repozytorium |
 
 ```bash
-node scripts/repo-setup.mjs sync AvenMail ../AvenMail              # formularze, szablon PR i pliki agentów
-node scripts/repo-setup.mjs agents AvenMail ../AvenMail [--check]  # tylko pliki agentów AI
-node scripts/repo-setup.mjs forms AvenMail ../AvenMail/.github     # tylko formularze i szablon PR
-node scripts/repo-setup.mjs about AvenMail [--dry-run|--check]     # opis, strona i tematy na GitHubie
-node scripts/repo-setup.mjs labels AvenMail [--dry-run]            # etykiety
-node scripts/repo-setup.mjs protect AvenMail [--dry-run]           # ustawienia, uprawnienia Actions i reguły gałęzi
-node scripts/repo-setup.mjs dispatch [AvenMail …]                  # natychmiastowa synchronizacja w repozytoriach
-node scripts/repo-setup.mjs audit [--markdown raport.md]           # audyt repozytoriów organizacji
-node scripts/repo-setup.mjs meta AvenMail [--issue 12] [--dry-run] # uzupełnienie metadanych zgłoszeń i PR
+node scripts/repo-setup.mjs sync AvenMail ../AvenMail                # formularze, szablon PR i pliki agentów
+node scripts/repo-setup.mjs agents AvenMail ../AvenMail [--check]    # tylko pliki agentów AI
+node scripts/repo-setup.mjs forms AvenMail ../AvenMail/.github       # tylko formularze i szablon PR
+node scripts/repo-setup.mjs about AvenMail [--dry-run|--check]       # opis, strona i tematy na GitHubie
+node scripts/repo-setup.mjs labels AvenMail [--dry-run]              # etykiety (tworzy, poprawia i usuwa zbędne)
+node scripts/repo-setup.mjs migrate-labels AvenMail|--all [--dry-run] # jednorazowa migracja starych etykiet
+node scripts/repo-setup.mjs protect AvenMail [--dry-run]             # ustawienia, uprawnienia Actions i reguły gałęzi
+node scripts/repo-setup.mjs dispatch [AvenMail …]                    # natychmiastowa synchronizacja w repozytoriach
+node scripts/repo-setup.mjs audit [--markdown raport.md]             # audyt repozytoriów organizacji
+node scripts/repo-setup.mjs meta AvenMail [--issue 12] [--dry-run]   # uzupełnienie metadanych zgłoszeń i PR
 ```
 
 Zasady opisuje [CONTRIBUTING.md](CONTRIBUTING.md).
