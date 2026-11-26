@@ -14,16 +14,17 @@ name: Issue automation
 #       uses: Monorise-Team/.github/.github/workflows/issue-automation.yml@main
 #       secrets: inherit
 #
-# 1. Triage (opened, edited): formularze nie umieją nadać etykiet z odpowiedzi, więc robi to automat:
-#    „Obszar” -> area: <wartość> (gdy taka etykieta istnieje w repozytorium), „Priorytet” -> prio: <wartość>,
-#    „Rodzaj” poprawia type: (Wydajność -> perf, Testy -> test). Z obszarem i priorytetem znika
-#    `meta: ❓ needs triage`. Na końcu tytuł dostaje typ i numer: „Problem” -> „🐛 Bugfix: [009] Problem”.
+# 1. Triage (opened, edited): formularze od razu ustawiają typ zgłoszenia, ale nie umieją nadać
+#    etykiet `area:` z odpowiedzi ani zmienić typu dla „Wydajność” / „Testy”. Automat dokłada etykiety
+#    „Obszar” -> `area: <wartość>` (gdy istnieją w repozytorium), ustawia lub poprawia typ zgłoszenia
+#    (`Wydajność` -> Performance, `Testy` -> Test, zgłoszenie synchronizacji -> Chore) i dopisuje typ
+#    oraz numer do tytułu: „Problem” -> „🐛 Bugfix: [009] Problem”.
 #    Etykiety pól to polskie nazwy z formularzy (templates/ISSUE_TEMPLATE); zmiana nazwy pola wymaga zmiany tutaj.
 # 2. Tablica „Monorise” (opened, reopened -> 📥 Backlog, closed -> ✅ Done). Wymaga sekretu PROJECT_TOKEN
 #    (token classic z uprawnieniami project i repo); bez niego krok się pomija, a kartę dodaje formularz.
-# 3. Panel boczny (każde zdarzenie): autor jako osoba przypisana, typ zgłoszenia organizacji (Bug, Feature,
-#    Task), milestone najbliższego wydania (najniższe otwarte vX.Y.Z), pola zgłoszeń organizacji
-#    (Priority z „Priorytet”/etykiety prio:, Effort z „Nakład pracy”, Start date = dzień założenia w strefie
+# 3. Panel boczny (każde zdarzenie): autor jako osoba przypisana, typ zgłoszenia organizacji (gdy brakuje
+#    albo wymaga poprawy), milestone najbliższego wydania (najniższe otwarte vX.Y.Z), pola zgłoszeń
+#    organizacji (Priority z „Priorytet”, Effort z „Nakład pracy”, Start date = dzień założenia w strefie
 #    Europe/Warsaw, Target date = Start date + 0/2/7 dni albo dzień zamknięcia przy zdarzeniu closed) oraz
 #    powiązania z pola „Zależności” także między repozytoriami (`#N`, `Repo#N`, `Monorise-Team/Repo#N`, URL;
 #    wiele po przecinku; na `closed` uzupełniamy tylko puste Target date). Reguły żyją w scripts/lib/issue-meta.mjs.
@@ -62,73 +63,95 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Checkout shared metadata rules
+        continue-on-error: true
+        uses: actions/checkout@v5
+        with:
+          repository: Monorise-Team/.github
+          ref: main
+          path: .monorise-shared
+          sparse-checkout: scripts/lib
+          persist-credentials: false
+
       - name: Triage and title
         if: github.event.action == 'opened' || github.event.action == 'edited'
         uses: actions/github-script@v7
         with:
           script: |
-            const TRIAGE = 'meta: ❓ needs triage';
-            const PRIOS = ['P0-critical', 'P1-high', 'P2-medium', 'P3-low'];
-            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.issue.number };
-            const body = context.payload.issue.body || '';
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const issue = context.payload.issue;
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number };
+            const body = issue.body || '';
+            const title = issue.title || '';
+
+            let meta = null;
+            try {
+              meta = await import(pathToFileURL(path.resolve('.monorise-shared/scripts/lib/issue-meta.mjs')).href);
+            } catch (error) {
+              core.warning(`moduł issue-meta.mjs niedostępny w kroku Triage: ${error.message}`);
+            }
 
             // Formularze zapisują się jako „### Pole\n\nwartość”
             const sections = {};
-            for (const chunk of body.split(/^### /m).slice(1)) {
+            for (const chunk of body.replace(/\r\n/g, '\n').split(/^### /m).slice(1)) {
               const nl = chunk.indexOf('\n');
               if (nl !== -1) sections[chunk.slice(0, nl).trim()] = chunk.slice(nl + 1).trim();
             }
             const values = (name) =>
               (sections[name] || '').split(/[,\n]/).map((v) => v.trim()).filter((v) => v && v !== '_No response_');
 
+            // Dodajemy wyłącznie etykiety `area:` z formularza (bez type:/prio:/meta:)
             const repoLabels = new Set(
               (await github.paginate(github.rest.issues.listLabelsForRepo, { owner: ref.owner, repo: ref.repo, per_page: 100 }))
                 .map((label) => label.name),
             );
+            const currentLabels = (issue.labels || []).map((l) => l.name);
             const add = new Set();
-            const remove = new Set();
-
             for (const area of values('Obszar')) {
-              if (repoLabels.has(`area: ${area}`)) add.add(`area: ${area}`);
+              const name = `area: ${area}`;
+              if (repoLabels.has(name) && !currentLabels.includes(name)) add.add(name);
             }
-            const prio = values('Priorytet')[0];
-            if (PRIOS.includes(prio)) {
-              add.add(`prio: ${prio}`);
-              for (const p of PRIOS) if (p !== prio) remove.add(`prio: ${p}`);
-            }
-            const kind = values('Rodzaj')[0] || '';
-            if (/^Wydajno/.test(kind)) {
-              add.add('type: ⚡ perf');
-              remove.add('type: ♻️ refactor');
-            } else if (/^Testy/.test(kind)) {
-              add.add('type: 🧪 test');
-              remove.add('type: 🔧 chore');
-            }
-
-            const current = context.payload.issue.labels.map((l) => l.name);
-            const hasArea = [...add, ...current].some((l) => l.startsWith('area: '));
-            const hasPrio = [...add].some((l) => l.startsWith('prio: ')) || current.some((l) => l.startsWith('prio: '));
-            // Formularz dokumentacji (albo repozytorium bez obszarów) nie pyta o obszar
-            const asksForArea = 'Obszar' in sections;
-            if (hasPrio && (hasArea || !asksForArea)) remove.add(TRIAGE);
-
-            const toAdd = [...add].filter((l) => !current.includes(l) && repoLabels.has(l));
-            const toRemove = [...remove].filter((l) => current.includes(l));
+            const toAdd = [...add];
             if (toAdd.length) await github.rest.issues.addLabels({ ...ref, labels: toAdd });
-            for (const name of toRemove) await github.rest.issues.removeLabel({ ...ref, name });
-            core.info(`Etykiety: +${toAdd.join(', ') || '-'} / -${toRemove.join(', ') || '-'}`);
+            core.info(`Etykiety area: +${toAdd.join(', ') || '-'}`);
 
-            // Tytuł na końcu: typ mógł się właśnie zmienić (Wydajność -> perf, Testy -> test)
-            const PREFIX = {
-              'type: ✨ feature': '✨ Feature', 'type: 🐛 bugfix': '🐛 Bugfix', 'type: ♻️ refactor': '♻️ Refactor',
-              'type: ⚡ perf': '⚡ Perf', 'type: 🔧 chore': '🔧 Chore', 'type: 📚 docs': '📚 Docs',
-              'type: 🧪 test': '🧪 Test', 'type: 🔒 security': '🔒 Security', 'type: 🔍 spike': '🔍 Spike',
+            // Typ zgłoszenia: formularz ustawia typ bazowy, automat doprecyzowuje (Wydajność -> Performance,
+            // Testy -> Test, synchronizacja -> Chore) lub uzupełnia brakujący typ.
+            const currentType = typeof issue.type === 'string' ? issue.type : issue.type?.name || null;
+            const kind = values('Rodzaj')[0] || '';
+            const fallbackType = () => {
+              if (/^Wydajno/i.test(kind)) return 'Performance';
+              if (/^Testy/i.test(kind)) return 'Test';
+              if (/^Refaktor/i.test(kind) && (!currentType || currentType === 'Performance')) return 'Refactor';
+              if (/^(Zależno|Zalezno|Build|Narzędz|Narzedz|Sprząt|Sprzat)/i.test(kind) && (!currentType || currentType === 'Test')) {
+                return 'Chore';
+              }
+              return currentType;
             };
-            const title = context.payload.issue.title || '';
+            const wantedType = meta
+              ? meta.resolveIssueType({ currentType, body, title, isSync: meta.isSyncIssue(issue) })
+              : fallbackType();
+
+            let effectiveType = currentType;
+            if (wantedType && wantedType !== currentType) {
+              try {
+                await github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type: wantedType });
+                effectiveType = wantedType;
+                core.info(`Typ zgłoszenia: ${currentType || '-'} -> ${wantedType}`);
+              } catch (error) {
+                core.warning(`typ zgłoszenia (${wantedType}): ${error.message}`);
+              }
+            }
+
+            // Tytuł na końcu: typ mógł się właśnie zmienić (Wydajność -> Performance, Testy -> Test)
+            const PREFIX = meta?.ISSUE_TYPE_TITLE_PREFIX || {
+              Feature: '✨ Feature', Bug: '🐛 Bugfix', Refactor: '♻️ Refactor',
+              Performance: '⚡ Perf', Chore: '🔧 Chore', Docs: '📚 Docs',
+              Test: '🧪 Test', Security: '🔒 Security', Spike: '🔍 Spike',
+            };
             if (/\[\d{3,}\]/.test(title)) return core.info('Tytuł ma już numer.');
-            const final = new Set([...current, ...toAdd]);
-            for (const l of toRemove) final.delete(l);
-            const prefix = PREFIX[[...final].find((l) => l.startsWith('type: '))];
+            const prefix = PREFIX[effectiveType];
             const padded = String(ref.issue_number).padStart(3, '0');
             const newTitle = prefix ? `${prefix}: [${padded}] ${title}` : `[${padded}] ${title}`;
             await github.rest.issues.update({ ...ref, title: newTitle.trim() });
@@ -175,16 +198,6 @@ jobs:
             }' > /dev/null
           echo "Zgłoszenie #${{ github.event.issue.number }} -> $COLUMN" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Checkout shared metadata rules
-        continue-on-error: true
-        uses: actions/checkout@v5
-        with:
-          repository: Monorise-Team/.github
-          ref: main
-          path: .monorise-shared
-          sparse-checkout: scripts/lib
-          persist-credentials: false
-
       - name: Sidebar
         uses: actions/github-script@v7
         with:
@@ -223,24 +236,27 @@ jobs:
               }
             }
 
-            // Odśwież etykiety po kroku Triage (na opened/edited mogły się właśnie zmienić)
-            let labels = (issue.labels || []).map((l) => l.name);
+            // Odśwież bieżący typ zgłoszenia po kroku Triage (na opened/edited mógł się właśnie zmienić)
+            let currentType = typeof issue.type === 'string' ? issue.type : issue.type?.name || null;
             try {
               const fresh = (await github.rest.issues.get(ref)).data;
-              labels = (fresh.labels || []).map((l) => l.name);
+              currentType = typeof fresh.type === 'string' ? fresh.type : fresh.type?.name || null;
             } catch {
-              // Zostajemy przy etykietach ze zdarzenia
+              // Zostajemy przy danych ze zdarzenia
             }
 
-            // Typ zgłoszenia organizacji (Bug, Feature, Task), gdy organizacja ma typy
-            const type = meta
-              ? meta.resolveIssueType(labels)
-              : labels.some((l) => /^type: .*(bugfix|security)$/.test(l))
-                ? 'Bug'
-                : labels.includes('type: ✨ feature') ? 'Feature' : 'Task';
-            if (!issue.type) {
-              if (await attempt('typ zgłoszenia', () => github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type }))) {
-                summary.push(`- Typ zgłoszenia: \`${type}\``);
+            // Typ zgłoszenia organizacji (ustaw gdy brakuje albo wymaga zmiany, np. na reopened)
+            if (action !== 'closed' && meta) {
+              const wantedType = meta.resolveIssueType({
+                currentType,
+                body: issue.body || '',
+                title: issue.title || '',
+                isSync: meta.isSyncIssue(issue),
+              });
+              if (wantedType && wantedType !== currentType) {
+                if (await attempt('typ zgłoszenia', () => github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type: wantedType }))) {
+                  summary.push(`- Typ zgłoszenia: \`${wantedType}\``);
+                }
               }
             }
 
@@ -285,11 +301,11 @@ jobs:
 
                 const { updates } = meta.planIssueFieldUpdates({
                   body: issue.body || '',
-                  labels,
                   state: action === 'closed' ? 'CLOSED' : 'OPEN',
                   createdAt: issue.created_at,
                   closedAt: issue.closed_at,
                   currentFields,
+                  isSync: meta.isSyncIssue(issue),
                   overwriteFromSource: action === 'edited',
                   onlyTargetOnClose: action === 'closed',
                 });

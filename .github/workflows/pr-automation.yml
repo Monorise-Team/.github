@@ -15,9 +15,9 @@ name: PR automation
 #
 # 1. Nazwa gałęzi: flow/<typ>/<numer>-<opis>, <numer> to istniejące zgłoszenie (inaczej zadanie jest czerwone).
 #    Do prod wolno tylko z dev albo z flow/hotfix/<numer>-<opis> tego samego repozytorium.
-# 2. Tytuł i etykieta: flow/chore/012-release-builds „Buildy tylko z prod i dev”
-#    -> „🔧 Chore: [012] Buildy tylko z prod i dev” i etykieta type:. Wydanie dev -> prod: „🚀 Release: dev → prod”.
-# 3. Panel boczny: autor jako osoba przypisana, etykiety area:/prio: i milestone ze zgłoszenia (albo najbliższego
+# 2. Tytuł: flow/chore/012-release-builds „Buildy tylko z prod i dev”
+#    -> „🔧 Chore: [012] Buildy tylko z prod i dev”. Wydanie dev -> prod: „🚀 Release: dev → prod”.
+# 3. Panel boczny: autor jako osoba przypisana, etykiety area: i milestone ze zgłoszenia (albo najbliższego
 #    wydania), „Closes #<numer>”, gdy brakuje go w opisie, oraz Start date na zamykanym zgłoszeniu (gdy puste,
 #    best-effort).
 #
@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   title:
-    name: Branch name, title and type label
+    name: Branch name and title
     if: github.event.action != 'edited' || github.event.changes.title || github.event.changes.base
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -94,29 +94,27 @@ jobs:
             }
             if (issue.pull_request) return fail(`#${issueNumber} to pull request, nie zgłoszenie.`, 'Numery zgłoszeń i pull requestów są wspólne. Użyj numeru zgłoszenia.');
 
-            const TYPE_LABEL = {
-              feature: 'type: ✨ feature', bugfix: 'type: 🐛 bugfix', hotfix: 'type: 🐛 bugfix', refactor: 'type: ♻️ refactor',
-              perf: 'type: ⚡ perf', chore: 'type: 🔧 chore', docs: 'type: 📚 docs', security: 'type: 🔒 security',
-              spike: 'type: 🔍 spike', test: 'type: 🧪 test',
+            const BRANCH_ISSUE_TYPE = {
+              feature: 'Feature', bugfix: 'Bug', hotfix: 'Bug', refactor: 'Refactor',
+              perf: 'Performance', chore: 'Chore', docs: 'Docs', security: 'Security',
+              spike: 'Spike', test: 'Test',
             };
-            const names = issue.labels.map((l) => l.name || l);
+            const issueType = typeof issue.type === 'string' ? issue.type : issue.type?.name || null;
             core.summary.addHeading('✅ Nazwa gałęzi poprawna', 2).addRaw(`\`${branch}\` → \`${base}\`\n\nZgłoszenie [#${issueNumber}](${issue.html_url}): ${issue.title}\n`);
-            if (names.some((n) => n.startsWith('type: ')) && !names.includes(TYPE_LABEL[type])) {
-              core.warning(`Gałąź mówi '${type}', a zgłoszenie #${issueNumber} ma inną etykietę type:. Nie blokuje scalenia, ale sprawdź.`);
+            if (issueType && issueType !== BRANCH_ISSUE_TYPE[type]) {
+              core.warning(`Gałąź mówi '${type}' (typ ${BRANCH_ISSUE_TYPE[type]}), a zgłoszenie #${issueNumber} ma typ '${issueType}'. Nie blokuje scalenia, ale sprawdź.`);
             }
             await core.summary.write();
 
-      - name: Title and type label
+      - name: Title
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
-            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number };
             const PREFIX = {
-              feature: ['✨ Feature', 'type: ✨ feature'], bugfix: ['🐛 Bugfix', 'type: 🐛 bugfix'],
-              hotfix: ['🚑 Hotfix', 'type: 🐛 bugfix'], refactor: ['♻️ Refactor', 'type: ♻️ refactor'],
-              perf: ['⚡ Perf', 'type: ⚡ perf'], chore: ['🔧 Chore', 'type: 🔧 chore'], docs: ['📚 Docs', 'type: 📚 docs'],
-              test: ['🧪 Test', 'type: 🧪 test'], security: ['🔒 Security', 'type: 🔒 security'], spike: ['🔍 Spike', 'type: 🔍 spike'],
+              feature: '✨ Feature', bugfix: '🐛 Bugfix', hotfix: '🚑 Hotfix', refactor: '♻️ Refactor',
+              perf: '⚡ Perf', chore: '🔧 Chore', docs: '📚 Docs',
+              test: '🧪 Test', security: '🔒 Security', spike: '🔍 Spike',
             };
             if (pr.head.ref === 'dev' && pr.base.ref === 'prod') {
               const title = '🚀 Release: dev → prod';
@@ -126,17 +124,13 @@ jobs:
             const m = pr.head.ref.match(/^flow\/([a-z]+)\/(\d{3,})-/);
             if (!m || !PREFIX[m[1]]) return core.info(`'${pr.head.ref}' to nie gałąź zadania: tytuł bez zmian.`);
             const [, type, number] = m;
-            const [prefix, label] = PREFIX[type];
+            const prefix = PREFIX[type];
             if (!/\[\d{3,}\]/.test(pr.title)) {
               // Usuń przedrostek Conventional Commits („feat: …”), jeśli autor go wpisał
               const text = pr.title.replace(/^[a-z]+(\([^)]*\))?!?:\s*/i, '');
               const title = `${prefix}: [${number}] ${text}`.trim();
               await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, title });
               core.info(`Tytuł -> ${title}`);
-            }
-            if (!pr.labels.some((l) => l.name === label)) {
-              try { await github.rest.issues.addLabels({ ...ref, labels: [label] }); }
-              catch (e) { core.warning(`Etykieta ${label}: ${e.message}`); }
             }
 
       - name: Fetch shared metadata rules
@@ -166,7 +160,7 @@ jobs:
               await github.rest.issues.addAssignees({ ...ref, assignees: [pr.user.login] });
             }
             const have = pr.labels.map((l) => l.name);
-            const copy = (issue?.labels ?? []).map((l) => l.name ?? l).filter((name) => /^(area|prio): /.test(name) && !have.includes(name));
+            const copy = (issue?.labels ?? []).map((l) => l.name ?? l).filter((name) => name.startsWith('area: ') && !have.includes(name));
             if (copy.length) await github.rest.issues.addLabels({ ...ref, labels: copy });
             if (!pr.milestone) {
               const open = (x) => x && x.state === 'open' && RELEASE.test(x.title);

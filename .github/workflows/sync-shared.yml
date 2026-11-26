@@ -137,14 +137,6 @@ jobs:
             }')
           fi
 
-          REPO_LABELS=$(gh api "repos/$REPO/labels?per_page=100" --paginate --slurp | jq -r 'add | .[].name')
-          LABEL_ARGS=()
-          for wanted_label in "type: 🔧 chore" "prio: P3-low"; do
-            if printf '%s\n' "$REPO_LABELS" | grep -Fxq "$wanted_label"; then
-              LABEL_ARGS+=(--label "$wanted_label")
-            fi
-          done
-
           if [ -z "$ISSUE_NUMBER" ]; then
             ISSUE_BODY_FILE=$(mktemp)
             cat <<EOF > "$ISSUE_BODY_FILE"
@@ -168,7 +160,7 @@ jobs:
 
           Mały
           EOF
-            ISSUE_URL=$(gh issue create --repo "$REPO" --title "$TITLE_SUFFIX" --body-file "$ISSUE_BODY_FILE" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+            ISSUE_URL=$(gh issue create --repo "$REPO" --title "$TITLE_SUFFIX" --body-file "$ISSUE_BODY_FILE")
             rm -f "$ISSUE_BODY_FILE"
             ISSUE_NUMBER="${ISSUE_URL##*/}"
             PADDED=$(printf '%03d' "$ISSUE_NUMBER")
@@ -179,11 +171,11 @@ jobs:
             FINAL_TITLE="🔧 Chore: [${PADDED}] ${TITLE_SUFFIX}"
           fi
 
-          # Uzupełnij pola zgłoszenia synchronizacji (Priority=Low, Effort=Low, Start/Target date=dziś, gdy puste) — best-effort.
+          # Uzupełnij typ (Chore) i pola zgłoszenia synchronizacji (Priority=Low, Effort=Low, Start/Target date=dziś, gdy puste) — best-effort.
           SHARED_META_MODULE="$SHARED_DIR/scripts/lib/issue-meta.mjs" \
           SYNC_REPO_NAME="$REPO_NAME" \
           SYNC_ISSUE_NUMBER="$ISSUE_NUMBER" \
-          node --input-type=module <<'NODE' || echo "::warning::Nie udało się uzupełnić pól zgłoszenia #${ISSUE_NUMBER}."
+          node --input-type=module <<'NODE' || echo "::warning::Nie udało się uzupełnić metadanych zgłoszenia #${ISSUE_NUMBER}."
           import { execFileSync } from "node:child_process";
           import { appendFileSync } from "node:fs";
           import { pathToFileURL } from "node:url";
@@ -207,6 +199,17 @@ jobs:
             }
             return parsed.data;
           };
+
+          try {
+            execFileSync("gh", ["api", "-X", "PATCH", `repos/${meta.ORG}/${repoName}/issues/${issueNumber}`, "-f", "type=Chore"], {
+              encoding: "utf8",
+              stdio: ["pipe", "pipe", "pipe"],
+            });
+            noteSummary(`- Typ zgłoszenia #${issueNumber}: \`Chore\`.`);
+          } catch (error) {
+            console.log(`::warning::typ zgłoszenia #${issueNumber}: ${error.message}`);
+            noteSummary(`- ⚠️ Typ zgłoszenia #${issueNumber}: pominięto (${error.message}).`);
+          }
 
           try {
             const orgData = gql(meta.ORG_ISSUE_FIELDS_QUERY, { org: meta.ORG });
@@ -281,7 +284,7 @@ jobs:
             | jq -r '[.[] | select(.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions")] | .[0].number // empty')
 
           if [ -z "$PR_NUMBER" ]; then
-            PR_URL=$(gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head "$BRANCH" --title "$FINAL_TITLE" --body-file "$PR_BODY_FILE" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+            PR_URL=$(gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head "$BRANCH" --title "$FINAL_TITLE" --body-file "$PR_BODY_FILE")
             PR_NUMBER="${PR_URL##*/}"
           else
             gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$FINAL_TITLE" --body-file "$PR_BODY_FILE"
@@ -360,18 +363,71 @@ jobs:
           if [ "$AUDIT_EXIT" -eq 1 ]; then
             if [ -n "$EXISTING" ]; then
               gh issue edit "$EXISTING" --repo "$REPO" --body-file "$AUDIT_FILE"
+              AUDIT_NUMBER="$EXISTING"
               echo "Zaktualizowano otwarte zgłoszenie audytu #${EXISTING}." >> "$GITHUB_STEP_SUMMARY"
             else
-              REPO_LABELS=$(gh api "repos/$REPO/labels?per_page=100" --paginate --slurp | jq -r 'add | .[].name')
-              LABEL_ARGS=()
-              for wanted_label in "type: 🔧 chore" "prio: P2-medium"; do
-                if printf '%s\n' "$REPO_LABELS" | grep -Fxq "$wanted_label"; then
-                  LABEL_ARGS+=(--label "$wanted_label")
-                fi
-              done
-              ISSUE_URL=$(gh issue create --repo "$REPO" --title "$AUDIT_TITLE" --body-file "$AUDIT_FILE" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+              ISSUE_URL=$(gh issue create --repo "$REPO" --title "$AUDIT_TITLE" --body-file "$AUDIT_FILE")
+              AUDIT_NUMBER="${ISSUE_URL##*/}"
               echo "Utworzono zgłoszenie audytu: ${ISSUE_URL}." >> "$GITHUB_STEP_SUMMARY"
             fi
+
+            # Ustaw typ Chore i pola zgłoszenia (Priority=Low, Effort=Low, Start/Target date=dziś, gdy puste) — best-effort.
+            AUDIT_ISSUE_NUMBER="$AUDIT_NUMBER" \
+            node --input-type=module <<'NODE' || echo "::warning::Nie udało się uzupełnić metadanych zgłoszenia audytu #${AUDIT_NUMBER}."
+          import { execFileSync } from "node:child_process";
+          import { appendFileSync } from "node:fs";
+          import * as meta from "./scripts/lib/issue-meta.mjs";
+
+          const issueNumber = Number(process.env.AUDIT_ISSUE_NUMBER);
+          const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+          const noteSummary = (line) => {
+            if (summaryFile) appendFileSync(summaryFile, `${line}\n`);
+          };
+          const gql = (query, variables) => {
+            const out = execFileSync("gh", ["api", "graphql", "-H", "GraphQL-Features: issue_fields", "--input", "-"], {
+              encoding: "utf8",
+              input: JSON.stringify({ query, variables }),
+              stdio: ["pipe", "pipe", "pipe"],
+            });
+            const parsed = JSON.parse(out || "{}");
+            if (parsed.errors?.length) {
+              throw new Error(parsed.errors.map((e) => e.message).join("; "));
+            }
+            return parsed.data;
+          };
+
+          try {
+            execFileSync("gh", ["api", "-X", "PATCH", `repos/${meta.ORG}/.github/issues/${issueNumber}`, "-f", "type=Chore"], {
+              encoding: "utf8",
+              stdio: ["pipe", "pipe", "pipe"],
+            });
+            noteSummary(`- Typ zgłoszenia #${issueNumber}: \`Chore\`.`);
+          } catch (error) {
+            console.log(`::warning::typ zgłoszenia audytu #${issueNumber}: ${error.message}`);
+          }
+
+          try {
+            const orgData = gql(meta.ORG_ISSUE_FIELDS_QUERY, { org: meta.ORG });
+            const orgFields = meta.indexOrgIssueFields(orgData?.organization);
+            const issueData = gql(meta.ISSUE_FIELD_VALUES_QUERY, {
+              owner: meta.ORG,
+              repo: ".github",
+              number: issueNumber,
+            });
+            const issueNode = issueData?.repository?.issue;
+            if (issueNode?.id) {
+              const currentFields = meta.extractCurrentFieldValues(issueNode.issueFieldValues?.nodes || []);
+              const updates = meta.planSyncIssueFieldUpdates({ currentFields });
+              const { inputs, applied } = meta.buildSetIssueFieldsInput(updates, orgFields);
+              if (inputs.length) {
+                gql(meta.SET_ISSUE_FIELD_VALUE_MUTATION, { issueId: issueNode.id, issueFields: inputs });
+                noteSummary(`- Pola zgłoszenia #${issueNumber}: ${applied.map((a) => `\`${a}\``).join(", ")}.`);
+              }
+            }
+          } catch (error) {
+            console.log(`::warning::pola zgłoszenia audytu #${issueNumber}: ${error.message}`);
+          }
+          NODE
           else
             if [ -n "$EXISTING" ]; then
               gh issue close "$EXISTING" --repo "$REPO" --comment "Audyt przeszedł bez uwag — wszystkie widoczne repozytoria organizacji są zgodne."
