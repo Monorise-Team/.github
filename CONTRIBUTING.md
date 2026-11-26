@@ -40,13 +40,13 @@ Każde zgłoszenie ma typ i zestaw pól organizacji (Issue types i Issue fields)
 | Pole | Wartości | Jak uzupełnia je automat |
 | --- | --- | --- |
 | Typ zgłoszenia | `✨ Feature`, `🐛 Bug`, `♻️ Refactor`, `⚡ Performance`, `🔧 Chore`, `📚 Docs`, `🧪 Test`, `🔒 Security`, `🔍 Spike` | ustawia formularz; automat zmienia `Refactor` → `Performance` („Wydajność”) i `Chore` → `Test` („Testy”) oraz uzupełnia brakujący typ (np. `Chore` w zgłoszeniach synchronizacji) |
-| `🚦 Priority` | `🔥 Urgent`, `⏫ High`, `🔼 Medium`, `🔽 Low` | z sekcji „Priorytet” w formularzu: `P0-critical` → `Urgent`, `P1-high` → `High`, `P2-medium` → `Medium`, `P3-low` → `Low` |
-| `💪 Effort` | `🐁 Low`, `🐕 Medium`, `🐘 High` | z sekcji „Nakład pracy”: `Mały` → `Low`, `Średni` → `Medium`, `Duży` → `High`; przy braku odpowiedzi `Medium` |
+| `🚦 Priority` | `🔴 P0: Critical`, `🟠 P1: High`, `🟡 P2: Medium`, `🟢 P3: Low` | z sekcji „Priorytet” w formularzu: `P0-critical` → `P0: Critical`, `P1-high` → `P1: High`, `P2-medium` → `P2: Medium`, `P3-low` → `P3: Low` |
+| `💪 Effort` | `🪶 Low`, `📦 Medium`, `🏋️ High` | z sekcji „Nakład pracy”: `Mały` → `Low`, `Średni` → `Medium`, `Duży` → `High`; przy braku odpowiedzi `Medium` |
 | `Start date` | data `YYYY-MM-DD` | gdy puste: dzień założenia zgłoszenia (strefa `Europe/Warsaw`); pilnuje tego też automat pull requestów przy zamykanym zgłoszeniu |
 | `Target date` | data `YYYY-MM-DD` | gdy puste: dla otwartego `Start date` + 0 dni (`Low`), + 2 dni (`Medium`) albo + 7 dni (`High`); dla zamkniętego dzień zamknięcia |
 | Milestone | najbliższe otwarte `vX.Y.Z` | gdy brak (zamknięte jako `not planned` nie dostają milestone) |
 
-Typy, pola i opcje mają w organizacji emotki i kolory (`🐛 Bug`, `🚦 Priority`, `🔥 Urgent`, `🛫 Start date`, `🏁 Target date`). Automaty i polecenie `meta` porównują nazwy bez emotki na początku, więc ozdobniki można zmieniać w ustawieniach organizacji bez zmian w kodzie. Wyjątek: nazwy typów z emotką są wpisane w formularzach (`type:`) i w `ISSUE_TYPE_DISPLAY_NAMES` w `scripts/lib/issue-meta.mjs`, więc zmiana nazwy typu wymaga też zmiany tam.
+Typy, pola i opcje mają w organizacji emotki i kolory (`🐛 Bug`, `🚦 Priority`, `🔴 P0: Critical`, `🛫 Start date`, `🏁 Target date`). Automaty i polecenie `meta` porównują nazwy bez emotki na początku (a w `Priority` rozpoznają poziom `P0`–`P3`), więc ozdobniki można zmieniać w ustawieniach organizacji bez zmian w kodzie. Wyjątek: nazwy typów z emotką są wpisane w formularzach (`type:`) i w `ISSUE_TYPE_DISPLAY_NAMES` w `scripts/lib/issue-meta.mjs`, więc zmiana nazwy typu wymaga też zmiany tam.
 
 Automat (`issue-automation.yml`) nie nadpisuje raz ustawionych dat, a `Priority`, `Effort` oraz typ dla „Wydajność”/„Testy” aktualizuje przy edycji treści zgłoszenia. W zgłoszeniach automatycznej synchronizacji (`sync-shared.yml`) ustawia typ `Chore`, `Priority: Low`, `Effort: Low` oraz `Start date` i `Target date` na bieżący dzień (gdy puste).
 
@@ -92,7 +92,7 @@ Przy delegowaniu zadania przez Relay Bridge utwórz lokalny `git worktree` tej g
 Nie używamy już etykiet `type:`, `prio:` ani `meta:` — ich rolę przejęły wbudowane funkcje GitHuba:
 
 - **Typ zgłoszenia (Issue type)**: `✨ Feature` · `🐛 Bug` · `♻️ Refactor` · `⚡ Performance` · `🔧 Chore` · `📚 Docs` · `🧪 Test` · `🔒 Security` · `🔍 Spike` (ustawia formularz, a przy „Wydajność” i „Testy” poprawia automat).
-- **Pola zgłoszeń (Issue fields)**: `Priority` (`Urgent` — produkcja leży albo dane są zagrożone, `High` — blokuje milestone, `Medium` — poczeka, `Low` — kosmetyka), `Effort` (`High`/`Medium`/`Low`), `Start date` i `Target date`. Priorytet żyje wyłącznie w polu `Priority`.
+- **Pola zgłoszeń (Issue fields)**: `🚦 Priority` (`🔴 P0: Critical` — produkcja leży albo dane są zagrożone, `🟠 P1: High` — blokuje milestone, `🟡 P2: Medium` — poczeka, `🟢 P3: Low` — kosmetyka), `💪 Effort` (`🏋️ High`/`📦 Medium`/`🪶 Low`), `Start date` i `Target date`. Priorytet żyje wyłącznie w polu `Priority`.
 - **Pull requesty**: GitHub nie obsługuje typów ani pól na pull requestach — typ pull requestu wynika z nazwy gałęzi i tytułu, a priorytet i obszar ze zgłoszenia powiązanego przez `Closes #<numer>`. Na pull requeście zostają tylko etykiety `area:` oraz etykiety narzędziowe poniżej.
 - **Etykiety, które zostają**:
   - **`area:`** (może być kilka): obszary repozytorium z `labels/repos.json`, np. `area: web`, `area: desktop`, `area: mobile`; kopiowane ze zgłoszenia na pull request.

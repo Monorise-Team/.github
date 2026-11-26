@@ -8,6 +8,7 @@ import {
   addDays,
   buildSetIssueFieldsInput,
   canonicalName,
+  canonicalOptionName,
   ISSUE_TYPE_DISPLAY_NAMES,
   issueTypeDisplayName,
   issueTypeNameCandidates,
@@ -604,5 +605,42 @@ describe("emotki w nazwach typów, pól i opcji", () => {
     ]);
     assert.deepEqual(current, { Priority: "Urgent", "Start date": "2026-11-26" });
     assert.equal(resolvePriority({ body: "", currentPriority: "🔥 Urgent" }).value, "Urgent");
+  });
+});
+
+describe("Priority z nazwami P0–P3 jak dawne etykiety", () => {
+  it("poziom P0–P3 zamienia się na wartość wewnętrzną tylko w polu Priority", () => {
+    assert.equal(canonicalOptionName("🚦 Priority", "🔴 P0: Critical"), "Urgent");
+    assert.equal(canonicalOptionName("Priority", "🟠 P1: High"), "High");
+    assert.equal(canonicalOptionName("Priority", "P2: Medium"), "Medium");
+    assert.equal(canonicalOptionName("Priority", "🟢 P3: Low"), "Low");
+    assert.equal(canonicalOptionName("Priority", "🔥 Urgent"), "Urgent");
+    assert.equal(canonicalOptionName("💪 Effort", "📦 Medium"), "Medium");
+  });
+
+  it("odczyt i zapis pola działają z nazwami P0–P3", () => {
+    const fields = indexOrgIssueFields({
+      issueFields: {
+        nodes: [
+          {
+            __typename: "IssueFieldSingleSelect",
+            id: "F1",
+            name: "🚦 Priority",
+            options: [
+              { id: "O0", name: "🔴 P0: Critical" },
+              { id: "O2", name: "🟡 P2: Medium" },
+            ],
+          },
+        ],
+      },
+    });
+    assert.equal(fields.get("Priority").options.get("Urgent"), "O0");
+    assert.deepEqual(buildSetIssueFieldsInput({ Priority: "Medium" }, fields).inputs, [
+      { fieldId: "F1", singleSelectOptionId: "O2" },
+    ]);
+    assert.deepEqual(extractCurrentFieldValues([{ field: { name: "🚦 Priority" }, name: "🟠 P1: High" }]), {
+      Priority: "High",
+    });
+    assert.equal(resolvePriority({ body: "", currentPriority: "🔴 P0: Critical" }).value, "Urgent");
   });
 });
