@@ -353,5 +353,52 @@
         "description": "Wygląd i ekrany"
       }
     ]
+  },
+  "KivoTasks": {
+    "kind": "production",
+    "public": true,
+    "description": "KivoTasks: zadania i projekty Monorise w przeglądarce, wzorem Linear",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "project-management",
+      "issue-tracker",
+      "nextjs",
+      "prisma",
+      "postgresql"
+    ],
+    "areas": [
+      {
+        "name": "web",
+        "description": "Aplikacja w przeglądarce na kivotasks.monorise.studio"
+      },
+      {
+        "name": "server",
+        "description": "API i serwer kivo.monorise.studio"
+      },
+      {
+        "name": "issues",
+        "description": "Zadania, statusy, tablica i lista"
+      },
+      {
+        "name": "projects",
+        "description": "Projekty, cykle i planowanie"
+      },
+      {
+        "name": "collaboration",
+        "description": "Komentarze, historia, załączniki i powiadomienia"
+      },
+      {
+        "name": "website",
+        "description": "Strona produktu na kivo.monorise.studio"
+      },
+      {
+        "name": "design",
+        "description": "Wygląd, ekrany, UX"
+      }
+    ],
+    "checks": [
+      "Format, lint, types, tests and build"
+    ]
   }
 }
