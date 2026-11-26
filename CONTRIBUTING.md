@@ -40,15 +40,15 @@ Każde zgłoszenie ma typ i zestaw pól organizacji (Issue types i Issue fields)
 | Pole | Wartości | Jak uzupełnia je automat |
 | --- | --- | --- |
 | Typ zgłoszenia | `✨ Feature`, `🐛 Bug`, `♻️ Refactor`, `⚡ Performance`, `🔧 Chore`, `📚 Docs`, `🧪 Test`, `🔒 Security`, `🔍 Spike` | ustawia formularz; automat zmienia `Refactor` → `Performance` („Wydajność”) i `Chore` → `Test` („Testy”) oraz uzupełnia brakujący typ (np. `Chore` w zgłoszeniach synchronizacji) |
-| `🚦 Priority` | `🔴 P0: Critical`, `🟠 P1: High`, `🟡 P2: Medium`, `🟢 P3: Low` | z sekcji „Priorytet” w formularzu: `P0-critical` → `P0: Critical`, `P1-high` → `P1: High`, `P2-medium` → `P2: Medium`, `P3-low` → `P3: Low` |
+| `🚦 Priority` | `🚨 P0: Critical`, `🔴 P1: High`, `🟡 P2: Medium`, `🟢 P3: Low` | z sekcji „Priorytet” w formularzu: `P0-critical` → `P0: Critical`, `P1-high` → `P1: High`, `P2-medium` → `P2: Medium`, `P3-low` → `P3: Low` |
 | `💪 Effort` | `🪶 Low`, `📦 Medium`, `🏋️ High` | z sekcji „Nakład pracy”: `Mały` → `Low`, `Średni` → `Medium`, `Duży` → `High`; przy braku odpowiedzi `Medium` |
 | `Start date` | data `YYYY-MM-DD` | gdy puste: dzień założenia zgłoszenia (strefa `Europe/Warsaw`); pilnuje tego też automat pull requestów przy zamykanym zgłoszeniu |
 | `Target date` | data `YYYY-MM-DD` | gdy puste: dla otwartego `Start date` + 0 dni (`Low`), + 2 dni (`Medium`) albo + 7 dni (`High`); dla zamkniętego dzień zamknięcia |
 | Milestone | najbliższe otwarte `vX.Y.Z` | gdy brak (zamknięte jako `not planned` nie dostają milestone) |
 
-Typy, pola i opcje mają w organizacji emotki i kolory (`🐛 Bug`, `🚦 Priority`, `🔴 P0: Critical`, `🛫 Start date`, `🏁 Target date`). Automaty i polecenie `meta` porównują nazwy bez emotki na początku (a w `Priority` rozpoznają poziom `P0`–`P3`), więc ozdobniki można zmieniać w ustawieniach organizacji bez zmian w kodzie. Wyjątek: nazwy typów z emotką są wpisane w formularzach (`type:`) i w `ISSUE_TYPE_DISPLAY_NAMES` w `scripts/lib/issue-meta.mjs`, więc zmiana nazwy typu wymaga też zmiany tam.
+Typy, pola i opcje mają w organizacji emotki i kolory (`🐛 Bug`, `🚦 Priority`, `🚨 P0: Critical`, `🛫 Start date`, `🏁 Target date`). Automaty i polecenie `meta` porównują nazwy bez emotki na początku (a w `Priority` rozpoznają poziom `P0`–`P3`), więc ozdobniki można zmieniać w ustawieniach organizacji bez zmian w kodzie. Wyjątek: nazwy typów z emotką są wpisane w formularzach (`type:`) i w `ISSUE_TYPE_DISPLAY_NAMES` w `scripts/lib/issue-meta.mjs`, więc zmiana nazwy typu wymaga też zmiany tam.
 
-Automat (`issue-automation.yml`) nie nadpisuje raz ustawionych dat, a `Priority`, `Effort` oraz typ dla „Wydajność”/„Testy” aktualizuje przy edycji treści zgłoszenia. W zgłoszeniach automatycznej synchronizacji (`sync-shared.yml`) ustawia typ `Chore`, `Priority: Low`, `Effort: Low` oraz `Start date` i `Target date` na bieżący dzień (gdy puste).
+Automat (`issue-automation.yml`) nie nadpisuje raz ustawionych dat, a `Priority`, `Effort` oraz typ dla „Wydajność”/„Testy” aktualizuje przy edycji treści zgłoszenia. W zgłoszeniach automatów (synchronizacja `sync-shared.yml`, „Audyt repozytoriów organizacji”, „Dependency Dashboard” z Renovate) ustawia typ `Chore`, `Priority: Low`, `Effort: Low` oraz `Start date` i `Target date` na bieżący dzień (gdy puste).
 
 W sekcji **„Zależności”** wpisujesz relacje, po jednej linii na typ (wiele odwołań w jednej linii rozdziel przecinkami):
 
@@ -77,7 +77,7 @@ node scripts/repo-setup.mjs meta MonoriseShared --issue 18 \
   --blocked-by MonoriseCore#13 --parent #4
 ```
 
-Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola i dopisać relacje (`--blocked-by`, `--parent`).
+Bez `--issue` polecenie uzupełnia wstecz wszystkie otwarte i zamknięte zgłoszenia (pomijając boty poza zgłoszeniami synchronizacji, audytu i pulpitu Renovate) oraz pull requesty zamykające zgłoszenia (kopiuje brakujące etykiety `area:`, milestone i przypisuje autora). Z `--issue` pozwala jawnie nadpisać pola i dopisać relacje (`--blocked-by`, `--parent`).
 
 **Gałąź w sekcji „Development”:** GitHub nie pozwala podpiąć pod zgłoszenie już istniejącej gałęzi przez API (`createLinkedBranch` tworzy wyłącznie nową gałąź). Żeby gałąź była widoczna w „Development”, załóż ją najpierw ze zgłoszenia:
 
@@ -92,7 +92,7 @@ Przy delegowaniu zadania przez Relay Bridge utwórz lokalny `git worktree` tej g
 Nie używamy już etykiet `type:`, `prio:` ani `meta:` — ich rolę przejęły wbudowane funkcje GitHuba:
 
 - **Typ zgłoszenia (Issue type)**: `✨ Feature` · `🐛 Bug` · `♻️ Refactor` · `⚡ Performance` · `🔧 Chore` · `📚 Docs` · `🧪 Test` · `🔒 Security` · `🔍 Spike` (ustawia formularz, a przy „Wydajność” i „Testy” poprawia automat).
-- **Pola zgłoszeń (Issue fields)**: `🚦 Priority` (`🔴 P0: Critical` — produkcja leży albo dane są zagrożone, `🟠 P1: High` — blokuje milestone, `🟡 P2: Medium` — poczeka, `🟢 P3: Low` — kosmetyka), `💪 Effort` (`🏋️ High`/`📦 Medium`/`🪶 Low`), `Start date` i `Target date`. Priorytet żyje wyłącznie w polu `Priority`.
+- **Pola zgłoszeń (Issue fields)**: `🚦 Priority` (`🚨 P0: Critical` — produkcja leży albo dane są zagrożone, `🔴 P1: High` — blokuje milestone, `🟡 P2: Medium` — poczeka, `🟢 P3: Low` — kosmetyka), `💪 Effort` (`🏋️ High`/`📦 Medium`/`🪶 Low`), `Start date` i `Target date`. Priorytet żyje wyłącznie w polu `Priority`.
 - **Pull requesty**: GitHub nie obsługuje typów ani pól na pull requestach — typ pull requestu wynika z nazwy gałęzi i tytułu, a priorytet i obszar ze zgłoszenia powiązanego przez `Closes #<numer>`. Na pull requeście zostają tylko etykiety `area:` oraz etykiety narzędziowe poniżej.
 - **Etykiety, które zostają**:
   - **`area:`** (może być kilka): obszary repozytorium z `labels/repos.json`, np. `area: web`, `area: desktop`, `area: mobile`; kopiowane ze zgłoszenia na pull request.

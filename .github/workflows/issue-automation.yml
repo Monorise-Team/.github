@@ -132,7 +132,7 @@ jobs:
               return currentType;
             };
             const wantedType = meta
-              ? meta.resolveIssueType({ currentType, body, title, isSync: meta.isSyncIssue(issue) })
+              ? meta.resolveIssueType({ currentType, body, title, isSync: (meta.isMaintenanceIssue ? meta.isMaintenanceIssue(issue) : meta.isSyncIssue(issue)) })
               : fallbackType();
 
             // Zapis typu: najpierw nazwa z emotką z organizacji, potem bez (gdy organizacja jej jeszcze nie ma)
@@ -270,7 +270,7 @@ jobs:
                 currentType,
                 body: issue.body || '',
                 title: issue.title || '',
-                isSync: meta.isSyncIssue(issue),
+                isSync: (meta.isMaintenanceIssue ? meta.isMaintenanceIssue(issue) : meta.isSyncIssue(issue)),
               });
               if (wantedType && plainName(wantedType) !== currentType) {
                 const setIssueType = async () => {
@@ -336,7 +336,7 @@ jobs:
                   createdAt: issue.created_at,
                   closedAt: issue.closed_at,
                   currentFields,
-                  isSync: meta.isSyncIssue(issue),
+                  isSync: (meta.isMaintenanceIssue ? meta.isMaintenanceIssue(issue) : meta.isSyncIssue(issue)),
                   overwriteFromSource: action === 'edited',
                   onlyTargetOnClose: action === 'closed',
                 });

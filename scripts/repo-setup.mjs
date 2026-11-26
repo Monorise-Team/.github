@@ -75,6 +75,7 @@ import {
   indexOrgIssueFields,
   isBotAuthor,
   isSyncIssue,
+  isMaintenanceIssue,
   isValidYmd,
   issueRefKey,
   parseIssueRef,
@@ -1145,7 +1146,7 @@ function meta(
     stats.issuesChecked += 1;
     let issueTouched = false;
     const tag = `${repo}#${issue.number}`;
-    const isSync = isSyncIssue(issue);
+    const isSync = isMaintenanceIssue(issue);
     const labelNames = (issue.labels?.nodes || []).map((l) => l.name);
     const noteChange = (line) => {
       console.log(`${prefix}${tag}: ${line}`);
@@ -1336,7 +1337,7 @@ function meta(
   } else {
     const allIssues = fetchAllRepoIssues(repo);
     for (const issue of allIssues) {
-      if (isBotAuthor(issue.author) && !isSyncIssue(issue)) {
+      if (isBotAuthor(issue.author) && !isMaintenanceIssue(issue)) {
         stats.skippedBots += 1;
         continue;
       }
