@@ -358,6 +358,21 @@ export function isSyncIssue(issue) {
   return SYNC_ISSUE_TITLE_RE.test(title) || title === "Synchronizacja wspólnych plików z .github";
 }
 
+/** Zgłoszenie codziennego audytu organizacji (`🔧 Chore: Audyt repozytoriów organizacji`). */
+export const AUDIT_ISSUE_TITLE_RE = /^(?:🔧 Chore: (?:\[\d{3,}\] )?)?Audyt repozytoriów organizacji$/;
+
+/** Pulpit zależności Renovate (`Dependency Dashboard`, czasem z numerem doklejonym przez automat). */
+export const DEPENDENCY_DASHBOARD_TITLE_RE = /^(?:\S+ \w+: )?(?:\[\d{3,}\] )?Dependency Dashboard$/;
+
+/**
+ * Zgłoszenia utrzymaniowe zakładane przez automaty (synchronizacja, audyt, pulpit Renovate). Dostają typ Chore,
+ * Priority Low, Effort Low i daty jak zgłoszenia synchronizacji, a `meta` ich nie pomija mimo autora-bota.
+ */
+export function isMaintenanceIssue(issue) {
+  const title = String(issue?.title || "").trim();
+  return isSyncIssue(issue) || AUDIT_ISSUE_TITLE_RE.test(title) || DEPENDENCY_DASHBOARD_TITLE_RE.test(title);
+}
+
 // ── Wersje, tagi wydań i milestone ──────────────────────────────────────────
 
 export function parseReleaseVersion(title) {

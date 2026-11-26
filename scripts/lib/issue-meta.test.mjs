@@ -20,6 +20,7 @@ import {
   indexOrgIssueFields,
   isBotAuthor,
   isSyncIssue,
+  isMaintenanceIssue,
   isValidYmd,
   parseFormSections,
   parseIssueRef,
@@ -642,5 +643,18 @@ describe("Priority z nazwami P0–P3 jak dawne etykiety", () => {
       Priority: "High",
     });
     assert.equal(resolvePriority({ body: "", currentPriority: "🔴 P0: Critical" }).value, "Urgent");
+  });
+});
+
+describe("zgłoszenia utrzymaniowe automatów", () => {
+  it("rozpoznaje synchronizację, audyt i pulpit Renovate", () => {
+    assert.ok(isMaintenanceIssue({ title: "🔧 Chore: [076] Synchronizacja wspólnych plików z .github" }));
+    assert.ok(isMaintenanceIssue({ title: "🔧 Chore: Audyt repozytoriów organizacji" }));
+    assert.ok(isMaintenanceIssue({ title: "Audyt repozytoriów organizacji" }));
+    assert.ok(isMaintenanceIssue({ title: "Dependency Dashboard" }));
+    assert.ok(isMaintenanceIssue({ title: "[003] Dependency Dashboard" }));
+    assert.ok(isMaintenanceIssue({ title: "🔧 Chore: [004] Dependency Dashboard" }));
+    assert.ok(!isMaintenanceIssue({ title: "🐛 Bugfix: [009] Problem z załącznikami" }));
+    assert.ok(!isMaintenanceIssue({ title: "Dependency Dashboard broken" }));
   });
 });
