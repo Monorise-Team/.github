@@ -201,10 +201,23 @@ jobs:
           };
 
           try {
-            execFileSync("gh", ["api", "-X", "PATCH", `repos/${meta.ORG}/${repoName}/issues/${issueNumber}`, "-f", "type=Chore"], {
-              encoding: "utf8",
-              stdio: ["pipe", "pipe", "pipe"],
-            });
+            // Typ w organizacji ma emotkę (`🔧 Chore`); bez niej próbujemy, gdy organizacja jeszcze jej nie ma
+            const typeNames = meta.issueTypeNameCandidates ? meta.issueTypeNameCandidates("Chore") : ["Chore"];
+            let typeError = null;
+            let typeSet = false;
+            for (const typeName of typeNames) {
+              try {
+                execFileSync("gh", ["api", "-X", "PATCH", `repos/${meta.ORG}/${repoName}/issues/${issueNumber}`, "-f", `type=${typeName}`], {
+                  encoding: "utf8",
+                  stdio: ["pipe", "pipe", "pipe"],
+                });
+                typeSet = true;
+                break;
+              } catch (error) {
+                typeError = error;
+              }
+            }
+            if (!typeSet) throw typeError;
             noteSummary(`- Typ zgłoszenia #${issueNumber}: \`Chore\`.`);
           } catch (error) {
             console.log(`::warning::typ zgłoszenia #${issueNumber}: ${error.message}`);
@@ -397,10 +410,23 @@ jobs:
           };
 
           try {
-            execFileSync("gh", ["api", "-X", "PATCH", `repos/${meta.ORG}/.github/issues/${issueNumber}`, "-f", "type=Chore"], {
-              encoding: "utf8",
-              stdio: ["pipe", "pipe", "pipe"],
-            });
+            // Typ w organizacji ma emotkę (`🔧 Chore`); bez niej próbujemy, gdy organizacja jeszcze jej nie ma
+            const typeNames = meta.issueTypeNameCandidates ? meta.issueTypeNameCandidates("Chore") : ["Chore"];
+            let typeError = null;
+            let typeSet = false;
+            for (const typeName of typeNames) {
+              try {
+                execFileSync("gh", ["api", "-X", "PATCH", `repos/${meta.ORG}/.github/issues/${issueNumber}`, "-f", `type=${typeName}`], {
+                  encoding: "utf8",
+                  stdio: ["pipe", "pipe", "pipe"],
+                });
+                typeSet = true;
+                break;
+              } catch (error) {
+                typeError = error;
+              }
+            }
+            if (!typeSet) throw typeError;
             noteSummary(`- Typ zgłoszenia #${issueNumber}: \`Chore\`.`);
           } catch (error) {
             console.log(`::warning::typ zgłoszenia audytu #${issueNumber}: ${error.message}`);

@@ -99,7 +99,10 @@ jobs:
               perf: 'Performance', chore: 'Chore', docs: 'Docs', security: 'Security',
               spike: 'Spike', test: 'Test',
             };
-            const issueType = typeof issue.type === 'string' ? issue.type : issue.type?.name || null;
+            // Nazwy typów w organizacji mają emotki (`🐛 Bug`); porównujemy je bez emotki
+            const issueType = String((typeof issue.type === 'string' ? issue.type : issue.type?.name) ?? '')
+              .replace(/^[^\p{L}\p{N}]+/u, '')
+              .trim() || null;
             core.summary.addHeading('✅ Nazwa gałęzi poprawna', 2).addRaw(`\`${branch}\` → \`${base}\`\n\nZgłoszenie [#${issueNumber}](${issue.html_url}): ${issue.title}\n`);
             if (issueType && issueType !== BRANCH_ISSUE_TYPE[type]) {
               core.warning(`Gałąź mówi '${type}' (typ ${BRANCH_ISSUE_TYPE[type]}), a zgłoszenie #${issueNumber} ma typ '${issueType}'. Nie blokuje scalenia, ale sprawdź.`);

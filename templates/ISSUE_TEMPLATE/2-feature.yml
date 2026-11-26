@@ -1,6 +1,6 @@
 name: ✨ Nowa funkcja
 description: Nowa możliwość dla użytkownika albo rozbudowa istniejącej.
-type: Feature
+type: "✨ Feature"
 projects:
   - __PROJECT__
 body:

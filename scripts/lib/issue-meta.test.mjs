@@ -7,6 +7,11 @@ import {
   VALID_ISSUE_TYPES,
   addDays,
   buildSetIssueFieldsInput,
+  canonicalName,
+  ISSUE_TYPE_DISPLAY_NAMES,
+  issueTypeDisplayName,
+  issueTypeNameCandidates,
+  sameIssueType,
   extractCurrentFieldValues,
   findNearestOpenMilestone,
   findNewestReleaseTag,
@@ -535,5 +540,69 @@ describe("milestones, tags, bots, GraphQL helpers and PR backfill", () => {
     assert.deepEqual(plan.addLabels, ["area: auth"]);
     assert.equal(plan.milestone.number, 2);
     assert.equal(plan.assignee, "matiqueue");
+  });
+});
+
+describe("emotki w nazwach typów, pól i opcji", () => {
+  it("canonicalName zdejmuje emotki i znaki z początku", () => {
+    assert.equal(canonicalName("🔥 Urgent"), "Urgent");
+    assert.equal(canonicalName("🚦 Priority"), "Priority");
+    assert.equal(canonicalName("♻️ Refactor"), "Refactor");
+    assert.equal(canonicalName("Start date"), "Start date");
+    assert.equal(canonicalName("🛫 Start date"), "Start date");
+    assert.equal(canonicalName(null), "");
+  });
+
+  it("typy mają nazwy z emotką i kandydatów do zapisu", () => {
+    assert.equal(Object.keys(ISSUE_TYPE_DISPLAY_NAMES).length, 9);
+    assert.equal(issueTypeDisplayName("Bug"), "🐛 Bug");
+    assert.equal(issueTypeDisplayName("🐛 Bug"), "🐛 Bug");
+    assert.deepEqual(issueTypeNameCandidates("Chore"), ["🔧 Chore", "Chore"]);
+    assert.deepEqual(issueTypeNameCandidates(""), []);
+    assert.ok(sameIssueType("🐛 Bug", "Bug"));
+    assert.ok(sameIssueType({ name: "⚡ Performance" }, "Performance"));
+    assert.ok(!sameIssueType("Bug", "Feature"));
+    assert.ok(!sameIssueType(null, null));
+  });
+
+  it("resolveIssueType rozpoznaje bieżący typ z emotką", () => {
+    const body = "### Rodzaj\n\nTesty, czyli nowe testy albo lepsze pokrycie\n";
+    assert.equal(resolveIssueType({ currentType: "🔧 Chore", body }), "Test");
+    assert.equal(resolveIssueType({ currentType: { name: "🐛 Bug" }, body: "" }), "Bug");
+  });
+
+  it("pola i opcje z emotkami mapują się na nazwy wewnętrzne", () => {
+    const org = {
+      issueFields: {
+        nodes: [
+          {
+            __typename: "IssueFieldSingleSelect",
+            id: "F1",
+            name: "🚦 Priority",
+            options: [
+              { id: "O1", name: "🔥 Urgent" },
+              { id: "O3", name: "🟡 Medium" },
+            ],
+          },
+          { __typename: "IssueFieldDate", id: "F2", name: "🛫 Start date" },
+        ],
+      },
+    };
+    const fields = indexOrgIssueFields(org);
+    assert.equal(fields.get("Priority").options.get("Urgent"), "O1");
+    assert.equal(fields.get("Start date").type, "date");
+
+    const { inputs } = buildSetIssueFieldsInput({ Priority: "Medium", "Start date": "2026-11-26" }, fields);
+    assert.deepEqual(inputs, [
+      { fieldId: "F1", singleSelectOptionId: "O3" },
+      { fieldId: "F2", dateValue: "2026-11-26" },
+    ]);
+
+    const current = extractCurrentFieldValues([
+      { field: { name: "🚦 Priority" }, name: "🔥 Urgent" },
+      { field: { name: "🛫 Start date" }, value: "2026-11-26T00:00:00Z" },
+    ]);
+    assert.deepEqual(current, { Priority: "Urgent", "Start date": "2026-11-26" });
+    assert.equal(resolvePriority({ body: "", currentPriority: "🔥 Urgent" }).value, "Urgent");
   });
 });

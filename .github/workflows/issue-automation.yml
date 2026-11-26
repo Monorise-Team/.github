@@ -118,7 +118,9 @@ jobs:
 
             // Typ zgłoszenia: formularz ustawia typ bazowy, automat doprecyzowuje (Wydajność -> Performance,
             // Testy -> Test, synchronizacja -> Chore) lub uzupełnia brakujący typ.
-            const currentType = typeof issue.type === 'string' ? issue.type : issue.type?.name || null;
+            // Nazwy typów w organizacji mają emotki (`🐛 Bug`); porównujemy je bez emotki
+            const plainName = (name) => String(name ?? '').replace(/^[^\p{L}\p{N}]+/u, '').trim() || null;
+            const currentType = plainName(typeof issue.type === 'string' ? issue.type : issue.type?.name);
             const kind = values('Rodzaj')[0] || '';
             const fallbackType = () => {
               if (/^Wydajno/i.test(kind)) return 'Performance';
@@ -133,11 +135,26 @@ jobs:
               ? meta.resolveIssueType({ currentType, body, title, isSync: meta.isSyncIssue(issue) })
               : fallbackType();
 
+            // Zapis typu: najpierw nazwa z emotką z organizacji, potem bez (gdy organizacja jej jeszcze nie ma)
+            const setIssueType = async (type) => {
+              const names = meta?.issueTypeNameCandidates ? meta.issueTypeNameCandidates(type) : [type];
+              let lastError;
+              for (const name of names) {
+                try {
+                  await github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type: name });
+                  return name;
+                } catch (error) {
+                  lastError = error;
+                }
+              }
+              throw lastError;
+            };
+
             let effectiveType = currentType;
-            if (wantedType && wantedType !== currentType) {
+            if (wantedType && plainName(wantedType) !== currentType) {
               try {
-                await github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type: wantedType });
-                effectiveType = wantedType;
+                await setIssueType(wantedType);
+                effectiveType = plainName(wantedType);
                 core.info(`Typ zgłoszenia: ${currentType || '-'} -> ${wantedType}`);
               } catch (error) {
                 core.warning(`typ zgłoszenia (${wantedType}): ${error.message}`);
@@ -237,10 +254,12 @@ jobs:
             }
 
             // Odśwież bieżący typ zgłoszenia po kroku Triage (na opened/edited mógł się właśnie zmienić)
-            let currentType = typeof issue.type === 'string' ? issue.type : issue.type?.name || null;
+            // Nazwy typów w organizacji mają emotki (`🐛 Bug`); porównujemy je bez emotki
+            const plainName = (name) => String(name ?? '').replace(/^[^\p{L}\p{N}]+/u, '').trim() || null;
+            let currentType = plainName(typeof issue.type === 'string' ? issue.type : issue.type?.name);
             try {
               const fresh = (await github.rest.issues.get(ref)).data;
-              currentType = typeof fresh.type === 'string' ? fresh.type : fresh.type?.name || null;
+              currentType = plainName(typeof fresh.type === 'string' ? fresh.type : fresh.type?.name);
             } catch {
               // Zostajemy przy danych ze zdarzenia
             }
@@ -253,8 +272,20 @@ jobs:
                 title: issue.title || '',
                 isSync: meta.isSyncIssue(issue),
               });
-              if (wantedType && wantedType !== currentType) {
-                if (await attempt('typ zgłoszenia', () => github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type: wantedType }))) {
+              if (wantedType && plainName(wantedType) !== currentType) {
+                const setIssueType = async () => {
+                  let lastError;
+                  for (const name of meta.issueTypeNameCandidates(wantedType)) {
+                    try {
+                      await github.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', { ...ref, type: name });
+                      return;
+                    } catch (error) {
+                      lastError = error;
+                    }
+                  }
+                  throw lastError;
+                };
+                if (await attempt('typ zgłoszenia', setIssueType)) {
                   summary.push(`- Typ zgłoszenia: \`${wantedType}\``);
                 }
               }
