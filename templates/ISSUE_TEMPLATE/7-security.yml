@@ -1,8 +1,6 @@
 name: 🔒 Utwardzanie bezpieczeństwa
 description: Hardening, zasady, ryzyko zależności. NIE dla żywych podatności.
-labels:
-  - "type: 🔒 security"
-  - "meta: ❓ needs triage"
+type: Security
 projects:
   - __PROJECT__
 body:

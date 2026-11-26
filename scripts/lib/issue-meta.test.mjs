@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  BRANCH_TYPE_TO_ISSUE_TYPE,
+  ISSUE_TYPE_TITLE_PREFIX,
+  LEGACY_TYPE_LABEL_TO_ISSUE_TYPE,
+  VALID_ISSUE_TYPES,
   addDays,
   buildSetIssueFieldsInput,
   extractCurrentFieldValues,
@@ -19,7 +23,11 @@ import {
   planSyncIssueFieldUpdates,
   resolveEffort,
   resolveIssueType,
+  resolveIssueTypeFromBranch,
+  resolveIssueTypeFromLabels,
+  resolveIssueTypeFromTitle,
   resolvePriority,
+  resolvePriorityFromLabels,
   shouldAssignMilestone,
   toWarsawDate,
 } from "./issue-meta.mjs";
@@ -32,34 +40,33 @@ describe("priority and effort mapping", () => {
     assert.deepEqual(resolvePriority({ body: "### Priorytet\n\nP3-low" }), { value: "Low", explicit: true });
   });
 
-  it("maps Priority from prio: label when form section is missing or empty", () => {
-    assert.deepEqual(resolvePriority({ body: "### Priorytet\n\n_No response_", labels: ["prio: P1-high"] }), {
+  it("falls back to existing Priority field when form section is missing, never labels", () => {
+    assert.deepEqual(resolvePriority({ body: "### Priorytet\n\n_No response_", currentPriority: "High" }), {
+      value: "High",
+      explicit: false,
+    });
+    assert.deepEqual(resolvePriority({ body: "", currentPriority: "Urgent" }), {
+      value: "Urgent",
+      explicit: false,
+    });
+    assert.deepEqual(resolvePriority({ body: "### Priorytet\n\nP1-high", currentPriority: "Low" }), {
       value: "High",
       explicit: true,
     });
-    assert.deepEqual(
-      resolvePriority({ body: "", labels: [{ name: "type: 🐛 bugfix" }, { name: "prio: P0-critical" }] }),
-      { value: "Urgent", explicit: true },
-    );
+    // Labels are ignored by resolvePriority; only the migration helper reads prio: labels
+    assert.deepEqual(resolvePriority({ body: "", labels: ["prio: P0-critical"] }), { value: null, explicit: false });
   });
 
-  it("picks highest priority when multiple prio: labels exist", () => {
-    assert.deepEqual(resolvePriority({ body: "", labels: ["prio: P3-low", "prio: P1-high"] }), {
-      value: "High",
-      explicit: true,
-    });
-  });
-
-  it("prefers form Priorytet over stale prio: label", () => {
-    assert.deepEqual(resolvePriority({ body: "### Priorytet\n\nP1-high", labels: ["prio: P3-low"] }), {
-      value: "High",
-      explicit: true,
-    });
+  it("resolves Priority from legacy prio: labels via migration helper", () => {
+    assert.equal(resolvePriorityFromLabels(["prio: P0-critical"]), "Urgent");
+    assert.equal(resolvePriorityFromLabels([{ name: "type: 🐛 bugfix" }, { name: "prio: P1-high" }]), "High");
+    assert.equal(resolvePriorityFromLabels(["prio: P3-low", "prio: P1-high"]), "High");
+    assert.equal(resolvePriorityFromLabels(["area: web", "dependencies"]), null);
   });
 
   it("handles missing Priority and sync issue fallback", () => {
-    assert.deepEqual(resolvePriority({ body: "", labels: [] }), { value: null, explicit: false });
-    assert.deepEqual(resolvePriority({ body: "", labels: [], isSync: true }), { value: "Low", explicit: false });
+    assert.deepEqual(resolvePriority({ body: "" }), { value: null, explicit: false });
+    assert.deepEqual(resolvePriority({ body: "", isSync: true }), { value: "Low", explicit: false });
   });
 
   it("maps Effort from form section Nakład pracy with Medium default", () => {
@@ -79,13 +86,103 @@ describe("priority and effort mapping", () => {
     assert.equal(sections["Priorytet"], "P1-high");
     assert.equal(sections["Nakład pracy"], "Duży");
   });
+});
 
-  it("resolves issue types consistently with issue-automation", () => {
-    assert.equal(resolveIssueType(["type: 🐛 bugfix"]), "Bug");
-    assert.equal(resolveIssueType(["type: 🔒 security"]), "Bug");
-    assert.equal(resolveIssueType(["type: ✨ feature"]), "Feature");
-    assert.equal(resolveIssueType(["type: 🔧 chore"]), "Task");
-    assert.equal(resolveIssueType([]), "Task");
+describe("issue type mapping", () => {
+  it("defines all 9 organization issue types and title prefixes", () => {
+    assert.deepEqual(VALID_ISSUE_TYPES, [
+      "Feature",
+      "Bug",
+      "Refactor",
+      "Performance",
+      "Chore",
+      "Docs",
+      "Test",
+      "Security",
+      "Spike",
+    ]);
+    for (const type of VALID_ISSUE_TYPES) {
+      assert.ok(ISSUE_TYPE_TITLE_PREFIX[type], `Missing prefix for ${type}`);
+    }
+    assert.equal(Object.keys(LEGACY_TYPE_LABEL_TO_ISSUE_TYPE).length, 9);
+    assert.equal(BRANCH_TYPE_TO_ISSUE_TYPE.hotfix, "Bug");
+  });
+
+  it("maps all legacy type: labels to organization issue types for migration", () => {
+    assert.equal(resolveIssueTypeFromLabels(["type: ✨ feature"]), "Feature");
+    assert.equal(resolveIssueTypeFromLabels(["type: 🐛 bugfix"]), "Bug");
+    assert.equal(resolveIssueTypeFromLabels(["type: ♻️ refactor"]), "Refactor");
+    assert.equal(resolveIssueTypeFromLabels(["type: ⚡ perf"]), "Performance");
+    assert.equal(resolveIssueTypeFromLabels(["type: 🔧 chore"]), "Chore");
+    assert.equal(resolveIssueTypeFromLabels(["type: 📚 docs"]), "Docs");
+    assert.equal(resolveIssueTypeFromLabels(["type: 🧪 test"]), "Test");
+    assert.equal(resolveIssueTypeFromLabels(["type: 🔒 security"]), "Security");
+    assert.equal(resolveIssueTypeFromLabels(["type: 🔍 spike"]), "Spike");
+    // Prefers specific type over Chore/Refactor if both labels existed
+    assert.equal(resolveIssueTypeFromLabels(["type: 🔧 chore", "type: 🧪 test"]), "Test");
+    assert.equal(resolveIssueTypeFromLabels(["type: ♻️ refactor", "type: ⚡ perf"]), "Performance");
+    assert.equal(resolveIssueTypeFromLabels(["area: web", "dependencies"]), null);
+    assert.equal(resolveIssueTypeFromLabels([]), null);
+  });
+
+  it("maps branch types and full branch names to issue types", () => {
+    assert.equal(resolveIssueTypeFromBranch("feature"), "Feature");
+    assert.equal(resolveIssueTypeFromBranch("bugfix"), "Bug");
+    assert.equal(resolveIssueTypeFromBranch("hotfix"), "Bug");
+    assert.equal(resolveIssueTypeFromBranch("refactor"), "Refactor");
+    assert.equal(resolveIssueTypeFromBranch("perf"), "Performance");
+    assert.equal(resolveIssueTypeFromBranch("chore"), "Chore");
+    assert.equal(resolveIssueTypeFromBranch("docs"), "Docs");
+    assert.equal(resolveIssueTypeFromBranch("test"), "Test");
+    assert.equal(resolveIssueTypeFromBranch("security"), "Security");
+    assert.equal(resolveIssueTypeFromBranch("spike"), "Spike");
+    assert.equal(resolveIssueTypeFromBranch("flow/perf/042-faster-list"), "Performance");
+    assert.equal(resolveIssueTypeFromBranch("flow/hotfix/007-fix-login"), "Bug");
+    assert.equal(resolveIssueTypeFromBranch("dev"), null);
+  });
+
+  it("resolves issue types from Rodzaj, sync issues, current type, title and form body", () => {
+    // Chore form with Testy -> Test
+    assert.equal(
+      resolveIssueType({ currentType: "Chore", body: "### Rodzaj\n\nTesty, czyli nowe testy albo lepsze pokrycie" }),
+      "Test",
+    );
+    // Editing Testy back to Build / CI -> Chore
+    assert.equal(
+      resolveIssueType({ currentType: "Test", body: "### Rodzaj\n\nBuild / CI, czyli potoki, skrypty, konfiguracja" }),
+      "Chore",
+    );
+    // Refactor form with Wydajność -> Performance
+    assert.equal(
+      resolveIssueType({
+        currentType: "Refactor",
+        body: "### Rodzaj\n\nWydajność, czyli szybkość, pamięć, rozmiar paczki, koszt zapytań",
+      }),
+      "Performance",
+    );
+    // Editing Wydajność back to Refaktor -> Refactor
+    assert.equal(
+      resolveIssueType({
+        currentType: "Performance",
+        body: "### Rodzaj\n\nRefaktor, czyli struktura, czytelność, duplikacja",
+      }),
+      "Refactor",
+    );
+    // Sync issue always resolves to Chore
+    assert.equal(resolveIssueType({ currentType: null, isSync: true }), "Chore");
+    // Keeps existing type from form when no Rodzaj override applies
+    assert.equal(resolveIssueType({ currentType: "Security", body: "### Słabość i jej skutek\n\nOpis" }), "Security");
+    assert.equal(resolveIssueType({ currentType: { name: "Feature" }, body: "" }), "Feature");
+    // Infers from title prefix or form signature when missing
+    assert.equal(resolveIssueType({ currentType: null, title: "📚 Docs: [012] Update guide" }), "Docs");
+    assert.equal(resolveIssueTypeFromTitle("🚑 Hotfix: [003] Fix outage"), "Bug");
+    assert.equal(
+      resolveIssueType({ currentType: null, body: "### Kroki do odtworzenia\n\n1. Kliknij" }),
+      "Bug",
+    );
+    assert.equal(resolveIssueType({ currentType: null, body: "### Limit czasu\n\n1 dzień" }), "Spike");
+    // Leaves unknown issue type unset rather than guessing
+    assert.equal(resolveIssueType({ currentType: null, title: "Bez typu", body: "Opis" }), null);
   });
 });
 
@@ -405,13 +502,13 @@ describe("milestones, tags, bots, GraphQL helpers and PR backfill", () => {
     assert.deepEqual(extracted, { Priority: "High", "Start date": "2026-11-24" });
   });
 
-  it("plans PR updates from closingIssuesReferences", () => {
+  it("plans PR updates from closingIssuesReferences with area: labels only (no prio:/type:)", () => {
     const pr = {
       state: "MERGED",
       author: { __typename: "User", login: "matiqueue" },
       assignees: { nodes: [] },
       milestone: null,
-      labels: { nodes: [{ name: "type: ✨ feature" }] },
+      labels: { nodes: [{ name: "area: ui" }] },
       closingIssuesReferences: {
         nodes: [
           {
@@ -419,7 +516,12 @@ describe("milestones, tags, bots, GraphQL helpers and PR backfill", () => {
             repository: { owner: { login: "Monorise-Team" }, name: "MonoriseShared" },
             milestone: { number: 2, title: "v0.2.0", state: "OPEN" },
             labels: {
-              nodes: [{ name: "area: auth" }, { name: "prio: P1-high" }, { name: "type: ✨ feature" }],
+              nodes: [
+                { name: "area: auth" },
+                { name: "area: ui" },
+                { name: "prio: P1-high" },
+                { name: "type: ✨ feature" },
+              ],
             },
           },
         ],
@@ -428,9 +530,9 @@ describe("milestones, tags, bots, GraphQL helpers and PR backfill", () => {
     const plan = planPullRequestUpdates(pr, {
       repoOwner: "Monorise-Team",
       repoName: "MonoriseShared",
-      repoLabels: new Set(["area: auth", "prio: P1-high", "type: ✨ feature"]),
+      repoLabels: new Set(["area: auth", "area: ui", "prio: P1-high", "type: ✨ feature"]),
     });
-    assert.deepEqual(plan.addLabels, ["area: auth", "prio: P1-high"]);
+    assert.deepEqual(plan.addLabels, ["area: auth"]);
     assert.equal(plan.milestone.number, 2);
     assert.equal(plan.assignee, "matiqueue");
   });

@@ -15,7 +15,12 @@
  *       ustawia opis, stronę i tematy repozytorium na GitHubie z labels/repos.json;
  *       --check porównuje stan na GitHubie i kończy się błędem przy rozbieżności
  *   node scripts/repo-setup.mjs labels <Repo> [--dry-run]
- *       etykiety z labels/common.json i obszary area: z labels/repos.json (tworzy brakujące, poprawia różniące się)
+ *       etykiety z labels/common.json i obszary area: z labels/repos.json (tworzy brakujące, poprawia
+ *       różniące się i usuwa wszystkie pozostałe poza etykietami zaczynającymi się od autorelease:)
+ *   node scripts/repo-setup.mjs migrate-labels <Repo|--all> [--dry-run]
+ *       jednorazowa migracja otwartych i zamkniętych zgłoszeń oraz pull requestów: ustawia typ zgłoszenia
+ *       ze starej etykiety type:, uzupełnia puste pole Priority z etykiety prio: i usuwa etykiety
+ *       type:, prio: oraz meta: ze zgłoszeń i pull requestów (idempotentne)
  *   node scripts/repo-setup.mjs protect <Repo> [--dry-run]
  *       ustawienia repozytorium (scalanie przez merge commit, usuwanie gałęzi po scaleniu, gałąź domyślna dev),
  *       uprawnienia GitHub Actions (token tylko do odczytu, zgoda na pull requesty od automatów),
@@ -28,12 +33,13 @@
  *       poza .github); pomija repozytoria, które nie mają jeszcze tego workflow
  *   node scripts/repo-setup.mjs audit [--markdown <plik>]
  *       sprawdza repozytoria organizacji na GitHubie przeciwko labels/repos.json (brakujące wpisy, nieistniejące
- *       repozytoria, rozbieżności About, brak .github/workflows/sync-shared.yml); kończy się błędem przy uwagach
+ *       repozytoria, rozbieżności About, pozostałe stare etykiety type:/prio:/meta:, brak
+ *       .github/workflows/sync-shared.yml); kończy się błędem przy uwagach
  *   node scripts/repo-setup.mjs meta <Repo> [--issue <n>] [--dry-run] [--start YYYY-MM-DD] [--target YYYY-MM-DD]
  *       [--priority Urgent|High|Medium|Low] [--effort High|Medium|Low] [--blocked-by <ref>] [--parent <ref>]
  *       uzupełnia metadane zgłoszeń i pull requestów (typ, Priority, Effort, Start/Target date, milestone,
- *       relacje z „Zależności”, etykiety i osobę przypisaną PR); bez --issue robi pełny backfill repozytorium,
- *       z --issue działa na jednym zgłoszeniu i pozwala ręcznie podać pola oraz relacje
+ *       relacje z „Zależności”, etykiety area: i osobę przypisaną PR); bez --issue robi pełny backfill
+ *       repozytorium, z --issue działa na jednym zgłoszeniu i pozwala ręcznie podać pola oraz relacje
  *
  * Polecenia odwołujące się do GitHuba wymagają zalogowanego `gh` (dla labels/protect/about z uprawnieniem admina).
  */
@@ -55,6 +61,7 @@ import { fileURLToPath } from "node:url";
 import {
   ADD_BLOCKED_BY_MUTATION,
   ADD_SUB_ISSUE_MUTATION,
+  FIELD_NAMES,
   ISSUE_NODE_ID_QUERY,
   ORG_ISSUE_FIELDS_QUERY,
   SET_ISSUE_FIELD_VALUE_MUTATION,
@@ -77,6 +84,15 @@ import {
   resolveIssueType,
   shouldAssignMilestone,
 } from "./lib/issue-meta.mjs";
+import {
+  filterSafeLabelsToRemove,
+  findLeftoverLegacyLabels,
+  formatIssueMigrationSummary,
+  formatPrMigrationSummary,
+  planIssueLabelMigration,
+  planLabelSync,
+  planPrLabelMigration,
+} from "./lib/label-migration.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ORG = "Monorise-Team";
@@ -126,6 +142,12 @@ function gh(args, { input, allowFail = false } = {}) {
 const ghJson = (args, options) => {
   const out = gh(args, options);
   return out === null ? null : JSON.parse(out || "null");
+};
+
+const ghPaginatedJson = (endpoint, options) => {
+  const pages = ghJson(["api", endpoint, "--paginate", "--slurp"], options);
+  if (pages === null) return null;
+  return Array.isArray(pages) ? pages.flat() : [];
 };
 
 const normalizeTopics = (topics) => [...new Set((topics ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean))].sort();
@@ -511,47 +533,56 @@ function about(repo, { dryRun, check }) {
 
 function labels(repo, { dryRun }) {
   const { areas } = settingsOf(repo);
-  const wanted = [
-    ...common,
-    ...areas.map((area) => ({ name: `area: ${area.name}`, color: "8250DF", description: area.description })),
-  ];
-  const existing = new Map(
-    ghJson(["api", `repos/${ORG}/${repo}/labels?per_page=100`, "--paginate"]).map((label) => [label.name, label]),
-  );
-  for (const label of wanted) {
-    const current = existing.get(label.name);
-    if (current && current.color.toLowerCase() === label.color.toLowerCase() && (current.description ?? "") === label.description)
-      continue;
-    const action = current ? "poprawiam" : "tworzę";
-    console.log(`${repo}: ${action} ${label.name}`);
+  const existing = ghPaginatedJson(`repos/${ORG}/${repo}/labels?per_page=100`) ?? [];
+  const plan = planLabelSync({ existingLabels: existing, commonLabels: common, areas });
+  const prefix = dryRun ? "[dry-run] " : "";
+
+  for (const label of plan.toCreate) {
+    console.log(`${prefix}${repo}: tworzę ${label.name}`);
     if (dryRun) continue;
-    if (current) {
-      gh([
-        "api",
-        "-X",
-        "PATCH",
-        `repos/${ORG}/${repo}/labels/${encodeURIComponent(label.name)}`,
-        "-f",
-        `color=${label.color}`,
-        "-f",
-        `description=${label.description}`,
-      ]);
-    } else {
-      gh([
-        "api",
-        "-X",
-        "POST",
-        `repos/${ORG}/${repo}/labels`,
-        "-f",
-        `name=${label.name}`,
-        "-f",
-        `color=${label.color}`,
-        "-f",
-        `description=${label.description}`,
-      ]);
-    }
+    gh([
+      "api",
+      "-X",
+      "POST",
+      `repos/${ORG}/${repo}/labels`,
+      "-f",
+      `name=${label.name}`,
+      "-f",
+      `color=${label.color}`,
+      "-f",
+      `description=${label.description}`,
+    ]);
   }
-  console.log(`${repo}: etykiety gotowe (${wanted.length})`);
+
+  for (const label of plan.toUpdate) {
+    console.log(`${prefix}${repo}: poprawiam ${label.name}`);
+    if (dryRun) continue;
+    const args = [
+      "api",
+      "-X",
+      "PATCH",
+      `repos/${ORG}/${repo}/labels/${encodeURIComponent(label.currentName)}`,
+      "-f",
+      `color=${label.color}`,
+      "-f",
+      `description=${label.description}`,
+    ];
+    if (label.currentName !== label.name) args.push("-f", `new_name=${label.name}`);
+    gh(args);
+  }
+
+  for (const name of plan.toDelete) {
+    console.log(`${prefix}${repo}: usuwam ${name}`);
+    if (dryRun) continue;
+    gh(["api", "-X", "DELETE", `repos/${ORG}/${repo}/labels/${encodeURIComponent(name)}`]);
+  }
+
+  const preserved = plan.preservedAutorelease.length
+    ? `, zachowano autorelease: ${plan.preservedAutorelease.length}`
+    : "";
+  console.log(
+    `${prefix}${repo}: etykiety gotowe (docelowe ${plan.wantedCount}: utworzono ${plan.toCreate.length}, poprawiono ${plan.toUpdate.length}, usunięto ${plan.toDelete.length}${preserved})`,
+  );
 }
 
 // ── Ustawienia i reguły ─────────────────────────────────────────────────────
@@ -735,6 +766,16 @@ function audit({ markdownPath }) {
       }
     }
 
+    const repoLabels = ghPaginatedJson(`repos/${ORG}/${repo.name}/labels?per_page=100`, { allowFail: true });
+    if (Array.isArray(repoLabels)) {
+      const leftover = findLeftoverLegacyLabels(repoLabels);
+      if (leftover.length) {
+        problems.push(
+          `- **${repo.name}**: pozostałe stare etykiety (${leftover.map((l) => `\`${l}\``).join(", ")}) — uruchom \`node scripts/repo-setup.mjs migrate-labels ${repo.name}\` i \`node scripts/repo-setup.mjs labels ${repo.name}\`.`,
+        );
+      }
+    }
+
     if (repo.name !== ".github") {
       const hasSync = gh(["api", `repos/${ORG}/${repo.name}/contents/.github/workflows/sync-shared.yml`], {
         allowFail: true,
@@ -759,7 +800,7 @@ function audit({ markdownPath }) {
         "",
       ]
     : [
-        `Wszystkie widoczne repozytoria organizacji \`${ORG}\` są zgodne z \`labels/repos.json\` i mają \`.github/workflows/sync-shared.yml\`.`,
+        `Wszystkie widoczne repozytoria organizacji \`${ORG}\` są zgodne z \`labels/repos.json\`, nie mają starych etykiet \`type:\`/\`prio:\`/\`meta:\` i mają \`.github/workflows/sync-shared.yml\`.`,
         "",
       ];
   const output = lines.join("\n");
@@ -917,7 +958,7 @@ const SINGLE_ISSUE_META_QUERY = `
 const REPO_ISSUES_META_PAGE_QUERY = `
   query($owner: String!, $repo: String!, $cursor: String) {
     repository(owner: $owner, name: $repo) {
-      issues(first: 50, after: $cursor, orderBy: { field: CREATED_AT, direction: ASC }) {
+      issues(first: 50, after: $cursor, states: [OPEN, CLOSED], orderBy: { field: CREATED_AT, direction: ASC }) {
         pageInfo {
           hasNextPage
           endCursor
@@ -933,7 +974,7 @@ const REPO_ISSUES_META_PAGE_QUERY = `
 const REPO_PRS_META_PAGE_QUERY = `
   query($owner: String!, $repo: String!, $cursor: String) {
     repository(owner: $owner, name: $repo) {
-      pullRequests(first: 50, after: $cursor, orderBy: { field: CREATED_AT, direction: ASC }) {
+      pullRequests(first: 50, after: $cursor, states: [OPEN, CLOSED, MERGED], orderBy: { field: CREATED_AT, direction: ASC }) {
         pageInfo {
           hasNextPage
           endCursor
@@ -1129,9 +1170,15 @@ function meta(
     }
 
     // 2. Typ zgłoszenia organizacji
-    if (!issue.issueType?.name) {
-      const wantedType = resolveIssueType(labelNames);
-      noteChange(`typ -> ${wantedType}`);
+    const currentType = issue.issueType?.name ?? null;
+    const wantedType = resolveIssueType({
+      currentType,
+      body: issue.body,
+      title: issue.title,
+      isSync,
+    });
+    if (wantedType && wantedType !== currentType) {
+      noteChange(currentType ? `typ ${currentType} -> ${wantedType}` : `typ -> ${wantedType}`);
       if (!dryRun) {
         try {
           gh(["api", "-X", "PATCH", `repos/${ORG}/${repo}/issues/${issue.number}`, "-f", `type=${wantedType}`]);
@@ -1145,7 +1192,6 @@ function meta(
     const currentFields = extractCurrentFieldValues(issue.issueFieldValues?.nodes || []);
     const { updates } = planIssueFieldUpdates({
       body: issue.body,
-      labels: labelNames,
       state: issue.state,
       createdAt: issue.createdAt,
       closedAt: issue.closedAt,
@@ -1289,7 +1335,7 @@ function meta(
     }
 
     const repoLabels = new Set(
-      (ghJson(["api", `repos/${ORG}/${repo}/labels?per_page=100`, "--paginate"]) || []).map((l) => l.name),
+      (ghPaginatedJson(`repos/${ORG}/${repo}/labels?per_page=100`) || []).map((l) => l.name),
     );
     const allPrs = fetchAllRepoPullRequests(repo);
     for (const pr of allPrs) {
@@ -1370,6 +1416,253 @@ function meta(
   return 0;
 }
 
+// ── Jednorazowa migracja starych etykiet (type:/prio:/meta:) ────────────────
+
+const REPO_ISSUES_MIGRATION_PAGE_QUERY = `
+  query($owner: String!, $repo: String!, $cursor: String) {
+    repository(owner: $owner, name: $repo) {
+      issues(first: 50, after: $cursor, states: [OPEN, CLOSED], orderBy: { field: CREATED_AT, direction: ASC }) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          number
+          state
+          issueType {
+            name
+          }
+          labels(first: 50) {
+            nodes {
+              name
+            }
+          }
+          issueFieldValues(first: 20) {
+            nodes {
+              ... on IssueFieldSingleSelectValue {
+                name
+                field {
+                  ... on IssueFieldSingleSelect {
+                    name
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const REPO_PRS_MIGRATION_PAGE_QUERY = `
+  query($owner: String!, $repo: String!, $cursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequests(first: 50, after: $cursor, states: [OPEN, CLOSED, MERGED], orderBy: { field: CREATED_AT, direction: ASC }) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          number
+          state
+          labels(first: 50) {
+            nodes {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+function fetchAllMigrationIssues(repo) {
+  const issues = [];
+  let cursor = null;
+  while (true) {
+    const res = ghGraphql(REPO_ISSUES_MIGRATION_PAGE_QUERY, { owner: ORG, repo, cursor });
+    const conn = res?.data?.repository?.issues;
+    if (!conn) break;
+    issues.push(...(conn.nodes || []));
+    if (!conn.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return issues;
+}
+
+function fetchAllMigrationPullRequests(repo) {
+  const prs = [];
+  let cursor = null;
+  while (true) {
+    const res = ghGraphql(REPO_PRS_MIGRATION_PAGE_QUERY, { owner: ORG, repo, cursor });
+    const conn = res?.data?.repository?.pullRequests;
+    if (!conn) break;
+    prs.push(...(conn.nodes || []));
+    if (!conn.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return prs;
+}
+
+function migrateLabels(targets, { dryRun = false } = {}) {
+  for (const repo of targets) settingsOf(repo);
+  const prefix = dryRun ? "[dry-run] " : "";
+  const mode = dryRun ? ", dry-run" : "";
+
+  let orgFields = new Map();
+  try {
+    const orgRes = ghGraphql(ORG_ISSUE_FIELDS_QUERY, { org: ORG });
+    orgFields = indexOrgIssueFields(orgRes?.data?.organization);
+  } catch (error) {
+    console.warn(`UWAGA: nie udało się pobrać pól zgłoszeń organizacji ${ORG}: ${error.message}`);
+  }
+
+  const grand = {
+    repos: 0,
+    issuesChecked: 0,
+    issuesChanged: 0,
+    typesUpdated: 0,
+    prioritiesUpdated: 0,
+    issueLabelsRemoved: 0,
+    prsChecked: 0,
+    prsChanged: 0,
+    prLabelsRemoved: 0,
+    warnings: 0,
+  };
+
+  for (const repo of targets) {
+    grand.repos += 1;
+    const stats = {
+      issuesChecked: 0,
+      issuesChanged: 0,
+      typesUpdated: 0,
+      prioritiesUpdated: 0,
+      issueLabelsRemoved: 0,
+      prsChecked: 0,
+      prsChanged: 0,
+      prLabelsRemoved: 0,
+      warnings: 0,
+    };
+
+    const issues = fetchAllMigrationIssues(repo);
+    for (const issue of issues) {
+      stats.issuesChecked += 1;
+      const plan = planIssueLabelMigration(issue);
+      if (!plan.hasChanges) continue;
+
+      const tag = `${repo}#${issue.number}`;
+      console.log(`${prefix}${tag}: ${formatIssueMigrationSummary(plan)}`);
+      let typeOk = true;
+      let priorityOk = true;
+
+      if (plan.setIssueType) {
+        if (!dryRun) {
+          try {
+            gh(["api", "-X", "PATCH", `repos/${ORG}/${repo}/issues/${issue.number}`, "-f", `type=${plan.setIssueType}`]);
+          } catch (error) {
+            typeOk = false;
+            console.warn(`UWAGA: ${tag}: nie udało się ustawić typu ${plan.setIssueType}: ${error.message}`);
+            stats.warnings += 1;
+          }
+        }
+        if (typeOk) stats.typesUpdated += 1;
+      }
+
+      if (plan.setPriority) {
+        const { inputs, skipped } = buildSetIssueFieldsInput({ [FIELD_NAMES.PRIORITY]: plan.setPriority }, orgFields);
+        if (skipped.length || !inputs.length) {
+          priorityOk = false;
+          console.warn(`UWAGA: ${tag}: nie udało się zaplanować pola Priority=${plan.setPriority} (${skipped.join(", ") || "brak pola"})`);
+          stats.warnings += 1;
+        } else if (!dryRun) {
+          try {
+            ghGraphql(SET_ISSUE_FIELD_VALUE_MUTATION, { issueId: issue.id, issueFields: inputs });
+          } catch (error) {
+            priorityOk = false;
+            console.warn(`UWAGA: ${tag}: nie udało się ustawić Priority=${plan.setPriority}: ${error.message}`);
+            stats.warnings += 1;
+          }
+        }
+        if (priorityOk) stats.prioritiesUpdated += 1;
+      }
+
+      const safeRemove = filterSafeLabelsToRemove(plan.removeLabels, { typeOk, priorityOk });
+      if (safeRemove.length < plan.removeLabels.length) {
+        const kept = plan.removeLabels.filter((name) => !safeRemove.includes(name));
+        console.warn(`UWAGA: ${tag}: zachowano etykiety (${kept.join(", ")}), bo zapis typu lub Priority nie powiódł się`);
+      }
+      for (const labelName of safeRemove) {
+        if (!dryRun) {
+          try {
+            gh(["api", "-X", "DELETE", `repos/${ORG}/${repo}/issues/${issue.number}/labels/${encodeURIComponent(labelName)}`]);
+            stats.issueLabelsRemoved += 1;
+          } catch (error) {
+            if (!/404|not found/i.test(error.message || "")) {
+              console.warn(`UWAGA: ${tag}: nie udało się usunąć etykiety ${labelName}: ${error.message}`);
+              stats.warnings += 1;
+            }
+          }
+        } else {
+          stats.issueLabelsRemoved += 1;
+        }
+      }
+
+      stats.issuesChanged += 1;
+    }
+
+    const prs = fetchAllMigrationPullRequests(repo);
+    for (const pr of prs) {
+      stats.prsChecked += 1;
+      const plan = planPrLabelMigration(pr);
+      if (!plan.hasChanges) continue;
+
+      const tag = `${repo} PR#${pr.number}`;
+      console.log(`${prefix}${tag}: ${formatPrMigrationSummary(plan)}`);
+      for (const labelName of plan.removeLabels) {
+        if (!dryRun) {
+          try {
+            gh(["api", "-X", "DELETE", `repos/${ORG}/${repo}/issues/${pr.number}/labels/${encodeURIComponent(labelName)}`]);
+            stats.prLabelsRemoved += 1;
+          } catch (error) {
+            if (!/404|not found/i.test(error.message || "")) {
+              console.warn(`UWAGA: ${tag}: nie udało się usunąć etykiety ${labelName}: ${error.message}`);
+              stats.warnings += 1;
+            }
+          }
+        } else {
+          stats.prLabelsRemoved += 1;
+        }
+      }
+
+      stats.prsChanged += 1;
+    }
+
+    console.log(
+      `Podsumowanie migrate-labels (${repo}${mode}): zgłoszenia ${stats.issuesChecked} (zmienione ${stats.issuesChanged}: typy ${stats.typesUpdated}, Priority ${stats.prioritiesUpdated}, usunięte etykiety ${stats.issueLabelsRemoved}), pull requesty ${stats.prsChecked} (zmienione ${stats.prsChanged}: usunięte etykiety ${stats.prLabelsRemoved}), ostrzeżenia ${stats.warnings}.`,
+    );
+
+    grand.issuesChecked += stats.issuesChecked;
+    grand.issuesChanged += stats.issuesChanged;
+    grand.typesUpdated += stats.typesUpdated;
+    grand.prioritiesUpdated += stats.prioritiesUpdated;
+    grand.issueLabelsRemoved += stats.issueLabelsRemoved;
+    grand.prsChecked += stats.prsChecked;
+    grand.prsChanged += stats.prsChanged;
+    grand.prLabelsRemoved += stats.prLabelsRemoved;
+    grand.warnings += stats.warnings;
+  }
+
+  if (targets.length > 1) {
+    console.log(
+      `Łącznie migrate-labels (${grand.repos} repozytoriów${mode}): zgłoszenia ${grand.issuesChecked} (zmienione ${grand.issuesChanged}: typy ${grand.typesUpdated}, Priority ${grand.prioritiesUpdated}, usunięte etykiety ${grand.issueLabelsRemoved}), pull requesty ${grand.prsChecked} (zmienione ${grand.prsChanged}: usunięte etykiety ${grand.prLabelsRemoved}), ostrzeżenia ${grand.warnings}.`,
+    );
+  }
+  return 0;
+}
+
 // ── Wywołanie ───────────────────────────────────────────────────────────────
 
 const VALUE_OPTIONS = new Set([
@@ -1429,6 +1722,7 @@ const usage = [
   "  sync <Repo> <katalog-repo> [--check]",
   "  about <Repo> [--dry-run | --check]",
   "  labels <Repo> [--dry-run]",
+  "  migrate-labels <Repo | --all> [--dry-run]",
   "  protect <Repo> [--dry-run]",
   "  dispatch [<Repo>…]",
   "  audit [--markdown <plik>]",
@@ -1450,6 +1744,17 @@ if (command === "forms" && repo && dir) {
   process.exit(about(repo, { dryRun: flags.has("--dry-run"), check: flags.has("--check") }));
 } else if (command === "labels" && repo) {
   labels(repo, { dryRun: flags.has("--dry-run") });
+} else if (command === "migrate-labels") {
+  const useAll = flags.has("--all");
+  if ((useAll && repo) || (!useAll && !repo)) {
+    console.error("Podaj nazwę jednego repozytorium albo flagę --all.");
+    console.error(usage);
+    process.exit(2);
+  }
+  const targets = useAll
+    ? Object.keys(repos).filter((name) => !name.startsWith("$") && !repos[name].planned)
+    : [repo];
+  process.exit(migrateLabels(targets, { dryRun: flags.has("--dry-run") }));
 } else if (command === "protect" && repo) {
   protect(repo, { dryRun: flags.has("--dry-run") });
 } else if (command === "dispatch") {
