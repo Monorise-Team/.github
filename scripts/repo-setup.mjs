@@ -58,6 +58,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkAgentsSize } from "./lib/agents-limit.mjs";
 import {
   ADD_BLOCKED_BY_MUTATION,
   ADD_SUB_ISSUE_MUTATION,
@@ -108,7 +109,6 @@ const SHARED_END = "<!-- END:monorise-shared -->";
 const SHARED_BEGIN_RE = /<!-- BEGIN:monorise-shared(?:\s[^>]*)? -->/;
 const SHARED_BLOCK_RE = /<!-- BEGIN:monorise-shared(?:\s[^>]*)? -->[\s\S]*?<!-- END:monorise-shared -->/;
 const GENERATED_MARKER = "monorise:generated";
-const AGENTS_MAX_CHARS = 12000;
 const CLAUDE_IMPORT_LINE =
   "Zasady pracy w tym repozytorium są wspólne dla wszystkich agentów i opisane w @AGENTS.md.";
 
@@ -393,16 +393,20 @@ function agents(repo, repoDir, { check }) {
   }
 
   if (nextAgents !== null) {
-    if (nextAgents.length > AGENTS_MAX_CHARS) {
-      console.error(
-        `BŁĄD: ${agentsPath} ma ${nextAgents.length} znaków (limit ${AGENTS_MAX_CHARS} dla Antigravity). Skróć część specyficzną dla repozytorium.`,
-      );
+    const sizeCheck = checkAgentsSize(nextAgents, agentsPath);
+    if (sizeCheck.status === "error") {
+      console.error(sizeCheck.message);
       errors += 1;
-    } else if (currentAgents !== nextAgents) {
-      differs += 1;
-      const verb = currentAgents === null ? "utworzono" : "zapisano";
-      checkLogs.push(`${currentAgents === null ? "do utworzenia" : "do zmiany"}: ${agentsPath}`);
-      writes.push({ path: agentsPath, content: nextAgents, verb });
+    } else {
+      if (sizeCheck.status === "warn") {
+        console.warn(sizeCheck.message);
+      }
+      if (currentAgents !== nextAgents) {
+        differs += 1;
+        const verb = currentAgents === null ? "utworzono" : "zapisano";
+        checkLogs.push(`${currentAgents === null ? "do utworzenia" : "do zmiany"}: ${agentsPath}`);
+        writes.push({ path: agentsPath, content: nextAgents, verb });
+      }
     }
   }
 
