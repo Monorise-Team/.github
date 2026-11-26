@@ -1,8 +1,6 @@
 name: 📚 Dokumentacja
 description: Czegoś brakuje, coś jest błędne, nieaktualne albo niejasne.
-labels:
-  - "type: 📚 docs"
-  - "meta: ❓ needs triage"
+type: Docs
 projects:
   - __PROJECT__
 body:
