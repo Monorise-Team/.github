@@ -195,14 +195,17 @@ Każde narzędzie AI (Claude, Gemini / Antigravity, ChatGPT / Codex, GitHub Copi
 | Plik w repozytorium | Pochodzenie |
 | --- | --- |
 | `AGENTS.md` (blok między `BEGIN:monorise-shared` i `END:monorise-shared`) | generowany z `templates/agents/shared.md` — zmieniaj wzorzec, nie ten blok |
-| `AGENTS.md` (część poniżej bloku) | pisana ręcznie dla danego repozytorium (czym jest, polecenia, zasady kodu); synchronizacja zostawia ją bez zmian |
+| `AGENTS.md` (część poniżej bloku) | pisana ręcznie dla danego repozytorium (zasady i linki do `docs/agents/*.md`); synchronizacja zostawia ją bez zmian |
+| `docs/agents/<temat>.md` | pisane ręcznie szczegóły repozytorium (opisy modułów, funkcje bazy, polecenia, przykłady), linkowane z `AGENTS.md` |
 | `CLAUDE.md` | pisany ręcznie; musi zawierać odwołanie `@AGENTS.md` (gdy pliku albo odwołania brakuje, synchronizacja je dopisuje) |
 | `GEMINI.md` | generowany z `templates/agents/GEMINI.md` |
 | `.github/copilot-instructions.md` | generowany z `templates/agents/copilot-instructions.md` |
 | `.github/workflows/sync-shared.yml` | generowany z `templates/agents/sync-shared.yml` (we wszystkich repozytoriach poza `.github`) |
 | `.github/ISSUE_TEMPLATE/*` i `.github/pull_request_template.md` | generowane z `templates/` |
 
-Cały plik `AGENTS.md` musi zmieścić się w limicie 12 000 znaków (limit jednego pliku w Antigravity) — skrypt kończy się błędem, gdy plik go przekroczy.
+Cały plik `AGENTS.md` musi zmieścić się w limicie 24 000 bajtów UTF-8 (limit jednego pliku w Antigravity — powyżej tej granicy plik jest ucinany). Skrypt wypisuje ostrzeżenie powyżej 20 000 bajtów i kończy się błędem powyżej 24 000 bajtów.
+
+W części repozytorium w `AGENTS.md` trzymaj tylko zasady i linki, a rozbudowane opisy (moduły, funkcje bazy, polecenia, przykłady) przenoś do `docs/agents/<temat>.md`. Przykład: szczegółowe zasady bazy w `MonoriseCore` trafiają do `docs/agents/database.md`, a w `AGENTS.md` zostaje krótka wskazówka: „Przed zmianą bazy przeczytaj `docs/agents/database.md`”.
 
 ### Codzienna synchronizacja
 
