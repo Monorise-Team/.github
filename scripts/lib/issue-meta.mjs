@@ -55,6 +55,22 @@ export function canonicalName(name) {
     .trim();
 }
 
+/** Wewnętrzne wartości pola Priority dla poziomów P0–P3 z nazw opcji w organizacji (`🔴 P0: Critical` → `Urgent`). */
+const PRIORITY_BY_LEVEL = Object.freeze(["Urgent", "High", "Medium", "Low"]);
+
+/**
+ * Nazwa opcji pola w postaci, której używa kod. Dla pola Priority organizacja może nazywać opcje jak dawne
+ * etykiety (`🔴 P0: Critical`, `🟠 P1: High`…); poziom P0–P3 zamieniamy na `Urgent`/`High`/`Medium`/`Low`.
+ */
+export function canonicalOptionName(fieldName, optionName) {
+  const option = canonicalName(optionName);
+  if (canonicalName(fieldName) === FIELD_NAMES.PRIORITY) {
+    const level = /^P([0-3])\b/i.exec(option);
+    if (level) return PRIORITY_BY_LEVEL[Number(level[1])];
+  }
+  return option;
+}
+
 /** Nazwa typu w organizacji (z emotką) dla nazwy wewnętrznej; nieznana nazwa wraca bez zmian. */
 export function issueTypeDisplayName(type) {
   const canonical = canonicalName(type);
@@ -213,7 +229,7 @@ export function resolvePriority({ body, currentPriority = null, isSync = false }
     if (mapped) return { value: mapped, explicit: true };
   }
 
-  const current = canonicalName(currentPriority);
+  const current = canonicalOptionName(FIELD_NAMES.PRIORITY, currentPriority);
   if (current && VALID_PRIORITIES.includes(current)) {
     return { value: current, explicit: false };
   }
@@ -500,7 +516,7 @@ export function extractCurrentFieldValues(nodes) {
     const fieldName = canonicalName(node?.field?.name);
     if (!fieldName) continue;
     if (typeof node.name === "string" && node.name) {
-      values[fieldName] = canonicalName(node.name);
+      values[fieldName] = canonicalOptionName(fieldName, node.name);
     } else if (typeof node.value === "string" && node.value) {
       values[fieldName] = node.value.slice(0, 10);
     }
@@ -515,7 +531,7 @@ export function indexOrgIssueFields(org) {
     if (node.__typename === "IssueFieldSingleSelect" || Array.isArray(node.options)) {
       const options = new Map();
       for (const opt of node.options || []) {
-        if (opt?.id && opt?.name) options.set(canonicalName(opt.name), opt.id);
+        if (opt?.id && opt?.name) options.set(canonicalOptionName(node.name, opt.name), opt.id);
       }
       fields.set(canonicalName(node.name), { id: node.id, type: "single_select", options });
     } else if (node.__typename === "IssueFieldDate") {
