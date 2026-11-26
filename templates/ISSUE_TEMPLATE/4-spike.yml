@@ -1,6 +1,6 @@
 name: 🔍 Spike / rozpoznanie
 description: Ograniczone czasowo śledztwo. Efektem jest decyzja, a nie wdrożony kod.
-type: Spike
+type: "🔍 Spike"
 projects:
   - __PROJECT__
 body:

@@ -82,6 +82,8 @@ import {
   planIssueFieldUpdates,
   planPullRequestUpdates,
   resolveIssueType,
+  canonicalName,
+  issueTypeNameCandidates,
   shouldAssignMilestone,
 } from "./lib/issue-meta.mjs";
 import {
@@ -1170,7 +1172,8 @@ function meta(
     }
 
     // 2. Typ zgłoszenia organizacji
-    const currentType = issue.issueType?.name ?? null;
+    // Nazwy typów w organizacji mają emotki (`🐛 Bug`); porównujemy je bez emotki
+    const currentType = canonicalName(issue.issueType?.name) || null;
     const wantedType = resolveIssueType({
       currentType,
       body: issue.body,
@@ -1180,11 +1183,18 @@ function meta(
     if (wantedType && wantedType !== currentType) {
       noteChange(currentType ? `typ ${currentType} -> ${wantedType}` : `typ -> ${wantedType}`);
       if (!dryRun) {
-        try {
-          gh(["api", "-X", "PATCH", `repos/${ORG}/${repo}/issues/${issue.number}`, "-f", `type=${wantedType}`]);
-        } catch (error) {
-          noteWarn(`nie udało się ustawić typu ${wantedType}: ${error.message}`);
+        let typeError = null;
+        let typeSet = false;
+        for (const typeName of issueTypeNameCandidates(wantedType)) {
+          try {
+            gh(["api", "-X", "PATCH", `repos/${ORG}/${repo}/issues/${issue.number}`, "-f", `type=${typeName}`]);
+            typeSet = true;
+            break;
+          } catch (error) {
+            typeError = error;
+          }
         }
+        if (!typeSet) noteWarn(`nie udało się ustawić typu ${wantedType}: ${typeError?.message}`);
       }
     }
 

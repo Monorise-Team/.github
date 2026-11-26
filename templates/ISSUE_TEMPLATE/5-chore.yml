@@ -1,6 +1,6 @@
 name: 🔧 Utrzymanie
 description: Zależności, konfiguracja, build, narzędzia, testy, sprzątanie.
-type: Chore
+type: "🔧 Chore"
 projects:
   - __PROJECT__
 body:
@@ -8,7 +8,7 @@ body:
     id: kind
     attributes:
       label: Rodzaj
-      description: "Przy wyborze testów automat zmienia typ zgłoszenia na `Test`."
+      description: "Przy wyborze testów automat zmienia typ zgłoszenia na `🧪 Test`."
       options:
         - Zależności, czyli aktualizacje, usuwanie, poprawki z audytu
         - Build / CI, czyli potoki, skrypty, konfiguracja

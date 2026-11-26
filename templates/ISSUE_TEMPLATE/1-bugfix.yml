@@ -1,6 +1,6 @@
 name: 🐛 Zgłoszenie błędu
 description: Coś działa niepoprawnie, wywala się albo zwraca zły wynik.
-type: Bug
+type: "🐛 Bug"
 projects:
   - __PROJECT__
 body:

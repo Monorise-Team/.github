@@ -29,6 +29,55 @@ export const VALID_ISSUE_TYPES = Object.freeze([
   "Spike",
 ]);
 
+/**
+ * Nazwy typów zgłoszeń w organizacji (z emotką). W kodzie posługujemy się nazwami bez emotki (`Bug`),
+ * a przy zapisie typu przez API podajemy nazwę z organizacji (`🐛 Bug`).
+ */
+export const ISSUE_TYPE_DISPLAY_NAMES = Object.freeze({
+  Feature: "✨ Feature",
+  Bug: "🐛 Bug",
+  Refactor: "♻️ Refactor",
+  Performance: "⚡ Performance",
+  Chore: "🔧 Chore",
+  Docs: "📚 Docs",
+  Test: "🧪 Test",
+  Security: "🔒 Security",
+  Spike: "🔍 Spike",
+});
+
+/**
+ * Nazwa bez emotek i znaków na początku (`🔥 Urgent` → `Urgent`, `🚦 Priority` → `Priority`), żeby automaty
+ * rozpoznawały typy, pola i opcje niezależnie od ozdobnika w ustawieniach organizacji.
+ */
+export function canonicalName(name) {
+  return String(name ?? "")
+    .replace(/^[^\p{L}\p{N}]+/u, "")
+    .trim();
+}
+
+/** Nazwa typu w organizacji (z emotką) dla nazwy wewnętrznej; nieznana nazwa wraca bez zmian. */
+export function issueTypeDisplayName(type) {
+  const canonical = canonicalName(type);
+  return ISSUE_TYPE_DISPLAY_NAMES[canonical] ?? canonical;
+}
+
+/**
+ * Nazwy do wysłania przy zapisie typu przez API: najpierw z emotką, potem bez (gdy organizacja jeszcze
+ * nie ma nazw z emotkami). Wywołujący próbuje po kolei, aż któraś zadziała.
+ */
+export function issueTypeNameCandidates(type) {
+  const canonical = canonicalName(type);
+  if (!canonical) return [];
+  return [...new Set([issueTypeDisplayName(canonical), canonical])];
+}
+
+/** Czy dwa typy oznaczają to samo, bez względu na emotkę (`🐛 Bug` i `Bug`). */
+export function sameIssueType(a, b) {
+  const left = canonicalName(typeof a === "string" ? a : a?.name);
+  const right = canonicalName(typeof b === "string" ? b : b?.name);
+  return Boolean(left) && left === right;
+}
+
 export const BRANCH_TYPE_TO_ISSUE_TYPE = Object.freeze({
   feature: "Feature",
   bugfix: "Bug",
@@ -164,8 +213,9 @@ export function resolvePriority({ body, currentPriority = null, isSync = false }
     if (mapped) return { value: mapped, explicit: true };
   }
 
-  if (currentPriority && VALID_PRIORITIES.includes(currentPriority)) {
-    return { value: currentPriority, explicit: false };
+  const current = canonicalName(currentPriority);
+  if (current && VALID_PRIORITIES.includes(current)) {
+    return { value: current, explicit: false };
   }
 
   if (isSync) return { value: "Low", explicit: false };
@@ -253,7 +303,7 @@ export function resolveIssueTypeFromTitle(title) {
 }
 
 export function resolveIssueType({ currentType = null, body = "", title = "", isSync = false } = {}) {
-  const current = typeof currentType === "string" ? currentType.trim() : currentType?.name?.trim() || null;
+  const current = canonicalName(typeof currentType === "string" ? currentType : currentType?.name) || null;
   if (isSync) return "Chore";
 
   const sections = parseFormSections(body);
@@ -447,10 +497,10 @@ export function parseRelations(body, { defaultOwner = ORG, defaultRepo = "", sel
 export function extractCurrentFieldValues(nodes) {
   const values = {};
   for (const node of nodes || []) {
-    const fieldName = node?.field?.name;
+    const fieldName = canonicalName(node?.field?.name);
     if (!fieldName) continue;
     if (typeof node.name === "string" && node.name) {
-      values[fieldName] = node.name;
+      values[fieldName] = canonicalName(node.name);
     } else if (typeof node.value === "string" && node.value) {
       values[fieldName] = node.value.slice(0, 10);
     }
@@ -465,11 +515,11 @@ export function indexOrgIssueFields(org) {
     if (node.__typename === "IssueFieldSingleSelect" || Array.isArray(node.options)) {
       const options = new Map();
       for (const opt of node.options || []) {
-        if (opt?.id && opt?.name) options.set(opt.name, opt.id);
+        if (opt?.id && opt?.name) options.set(canonicalName(opt.name), opt.id);
       }
-      fields.set(node.name, { id: node.id, type: "single_select", options });
+      fields.set(canonicalName(node.name), { id: node.id, type: "single_select", options });
     } else if (node.__typename === "IssueFieldDate") {
-      fields.set(node.name, { id: node.id, type: "date" });
+      fields.set(canonicalName(node.name), { id: node.id, type: "date" });
     }
   }
   return fields;

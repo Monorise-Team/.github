@@ -1,6 +1,6 @@
 name: 📚 Dokumentacja
 description: Czegoś brakuje, coś jest błędne, nieaktualne albo niejasne.
-type: Docs
+type: "📚 Docs"
 projects:
   - __PROJECT__
 body:
