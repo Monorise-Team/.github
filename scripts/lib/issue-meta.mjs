@@ -17,6 +17,54 @@ export const FIELD_NAMES = Object.freeze({
 
 export const VALID_PRIORITIES = Object.freeze(["Urgent", "High", "Medium", "Low"]);
 export const VALID_EFFORTS = Object.freeze(["High", "Medium", "Low"]);
+export const VALID_ISSUE_TYPES = Object.freeze([
+  "Feature",
+  "Bug",
+  "Refactor",
+  "Performance",
+  "Chore",
+  "Docs",
+  "Test",
+  "Security",
+  "Spike",
+]);
+
+export const BRANCH_TYPE_TO_ISSUE_TYPE = Object.freeze({
+  feature: "Feature",
+  bugfix: "Bug",
+  hotfix: "Bug",
+  refactor: "Refactor",
+  perf: "Performance",
+  chore: "Chore",
+  docs: "Docs",
+  test: "Test",
+  security: "Security",
+  spike: "Spike",
+});
+
+export const LEGACY_TYPE_LABEL_TO_ISSUE_TYPE = Object.freeze({
+  "type: ✨ feature": "Feature",
+  "type: 🐛 bugfix": "Bug",
+  "type: ♻️ refactor": "Refactor",
+  "type: ⚡ perf": "Performance",
+  "type: 🔧 chore": "Chore",
+  "type: 📚 docs": "Docs",
+  "type: 🧪 test": "Test",
+  "type: 🔒 security": "Security",
+  "type: 🔍 spike": "Spike",
+});
+
+export const ISSUE_TYPE_TITLE_PREFIX = Object.freeze({
+  Feature: "✨ Feature",
+  Bug: "🐛 Bugfix",
+  Refactor: "♻️ Refactor",
+  Performance: "⚡ Perf",
+  Chore: "🔧 Chore",
+  Docs: "📚 Docs",
+  Test: "🧪 Test",
+  Security: "🔒 Security",
+  Spike: "🔍 Spike",
+});
 
 export const PRIORITY_MAP = Object.freeze({
   "p0-critical": "Urgent",
@@ -105,17 +153,29 @@ export function sectionValues(sections, name) {
     .filter((v) => v && v !== "_No response_");
 }
 
-function labelNamesOf(labels) {
+export function labelNamesOf(labels) {
   return (labels || []).map((label) => (typeof label === "string" ? label : label?.name || "")).filter(Boolean);
 }
 
-export function resolvePriority({ body, labels, isSync = false } = {}) {
+export function resolvePriority({ body, currentPriority = null, isSync = false } = {}) {
   const sections = parseFormSections(body);
   for (const raw of sectionValues(sections, "Priorytet")) {
     const mapped = PRIORITY_MAP[raw.toLowerCase()];
     if (mapped) return { value: mapped, explicit: true };
   }
 
+  if (currentPriority && VALID_PRIORITIES.includes(currentPriority)) {
+    return { value: currentPriority, explicit: false };
+  }
+
+  if (isSync) return { value: "Low", explicit: false };
+  return { value: null, explicit: false };
+}
+
+/**
+ * Czysty helper tylko do jednorazowej migracji starych etykiet `prio:` na pole Priority.
+ */
+export function resolvePriorityFromLabels(labels) {
   let best = null;
   for (const name of labelNamesOf(labels)) {
     const m = /^prio:\s*(P[0-3]-[a-z]+)$/i.exec(name.trim());
@@ -125,10 +185,7 @@ export function resolvePriority({ body, labels, isSync = false } = {}) {
       best = mapped;
     }
   }
-  if (best) return { value: best, explicit: true };
-
-  if (isSync) return { value: "Low", explicit: false };
-  return { value: null, explicit: false };
+  return best;
 }
 
 export function resolveEffort({ body, isSync = false } = {}) {
@@ -141,11 +198,87 @@ export function resolveEffort({ body, isSync = false } = {}) {
   return { value: "Medium", explicit: false };
 }
 
-export function resolveIssueType(labels) {
-  const names = labelNamesOf(labels);
-  if (names.some((name) => /^type: .*(bugfix|security)$/.test(name))) return "Bug";
-  if (names.includes("type: ✨ feature")) return "Feature";
-  return "Task";
+/**
+ * Czysty helper tylko do jednorazowej migracji starych etykiet `type:` na typy zgłoszeń organizacji.
+ */
+export function resolveIssueTypeFromLabels(labels) {
+  const matches = [];
+  for (const raw of labelNamesOf(labels)) {
+    const name = raw.trim();
+    const exact = LEGACY_TYPE_LABEL_TO_ISSUE_TYPE[name];
+    if (exact) {
+      matches.push(exact);
+      continue;
+    }
+    const m = /^type:\s*(?:[^\s]+\s+)?(feature|bugfix|hotfix|refactor|perf|chore|docs|test|security|spike)$/i.exec(
+      name,
+    );
+    if (m && BRANCH_TYPE_TO_ISSUE_TYPE[m[1].toLowerCase()]) {
+      matches.push(BRANCH_TYPE_TO_ISSUE_TYPE[m[1].toLowerCase()]);
+    }
+  }
+  if (!matches.length) return null;
+  const specific = matches.find((type) => type !== "Chore" && type !== "Refactor");
+  return specific ?? matches[0];
+}
+
+export function resolveIssueTypeFromBranch(branchTypeOrName) {
+  const raw = String(branchTypeOrName || "").trim();
+  if (!raw) return null;
+  const direct = BRANCH_TYPE_TO_ISSUE_TYPE[raw.toLowerCase()];
+  if (direct) return direct;
+  const m = /^flow\/([a-z]+)\/\d{3,}-/.exec(raw);
+  return m ? (BRANCH_TYPE_TO_ISSUE_TYPE[m[1]] ?? null) : null;
+}
+
+const TITLE_PREFIX_PATTERNS = [
+  [/^(?:✨\s*)?feature:/i, "Feature"],
+  [/^(?:🐛\s*)?bugfix:/i, "Bug"],
+  [/^(?:🚑\s*)?hotfix:/i, "Bug"],
+  [/^(?:♻️\s*)?refactor:/i, "Refactor"],
+  [/^(?:⚡\s*)?perf(?:ormance)?:/i, "Performance"],
+  [/^(?:🔧\s*)?chore:/i, "Chore"],
+  [/^(?:📚\s*)?docs:/i, "Docs"],
+  [/^(?:🧪\s*)?test:/i, "Test"],
+  [/^(?:🔒\s*)?security:/i, "Security"],
+  [/^(?:🔍\s*)?spike:/i, "Spike"],
+];
+
+export function resolveIssueTypeFromTitle(title) {
+  const trimmed = String(title || "").trim();
+  for (const [pattern, type] of TITLE_PREFIX_PATTERNS) {
+    if (pattern.test(trimmed)) return type;
+  }
+  return null;
+}
+
+export function resolveIssueType({ currentType = null, body = "", title = "", isSync = false } = {}) {
+  const current = typeof currentType === "string" ? currentType.trim() : currentType?.name?.trim() || null;
+  if (isSync) return "Chore";
+
+  const sections = parseFormSections(body);
+  const kind = sectionValues(sections, "Rodzaj")[0] || "";
+  if (/^Wydajno/i.test(kind)) return "Performance";
+  if (/^Testy/i.test(kind)) return "Test";
+  if (/^Refaktor/i.test(kind) && (!current || current === "Performance")) return "Refactor";
+  if (/^(Zależno|Zalezno|Build|Narzędz|Narzedz|Sprząt|Sprzat)/i.test(kind) && (!current || current === "Test")) {
+    return "Chore";
+  }
+
+  if (current) return current;
+
+  const fromTitle = resolveIssueTypeFromTitle(title);
+  if (fromTitle) return fromTitle;
+
+  if ("Kroki do odtworzenia" in sections || "Czego się spodziewasz" in sections) return "Bug";
+  if ("Kryteria akceptacji" in sections) return "Feature";
+  if ("Limit czasu" in sections) return "Spike";
+  if ("Potwierdzenie jawności" in sections || "Słabość i jej skutek" in sections) return "Security";
+  if ("Gdzie" in sections && "Co jest nie tak" in sections) return "Docs";
+  if ("Co trzeba zrobić i dlaczego teraz" in sections) return "Chore";
+  if ("Co jest nie tak i dlaczego to boli" in sections) return "Refactor";
+
+  return null;
 }
 
 export function isBotAuthor(author) {
@@ -344,7 +477,6 @@ export function indexOrgIssueFields(org) {
 
 export function planIssueFieldUpdates({
   body = "",
-  labels = [],
   state = "OPEN",
   createdAt,
   closedAt = null,
@@ -368,7 +500,11 @@ export function planIssueFieldUpdates({
   }
 
   // Priority
-  const prioritySource = resolvePriority({ body, labels, isSync });
+  const prioritySource = resolvePriority({
+    body,
+    currentPriority: currentFields[FIELD_NAMES.PRIORITY] || null,
+    isSync,
+  });
   if (overrides.priority) {
     effective[FIELD_NAMES.PRIORITY] = overrides.priority;
     if (currentFields[FIELD_NAMES.PRIORITY] !== overrides.priority) {
@@ -498,21 +634,15 @@ export function planPullRequestUpdates(
   }
 
   const haveLabels = new Set(labelNamesOf(pr.labels?.nodes ?? pr.labels));
-  const hasPrio = [...haveLabels].some((name) => name.startsWith("prio: "));
 
   const addLabels = [];
   const addedSet = new Set();
-  let addedPrio = hasPrio;
 
   for (const issue of closingIssues) {
     for (const name of labelNamesOf(issue.labels?.nodes ?? issue.labels)) {
-      if (!/^(area|prio): /.test(name)) continue;
+      if (!name.startsWith("area: ")) continue;
       if (haveLabels.has(name) || addedSet.has(name)) continue;
       if (repoLabels && !repoLabels.has(name)) continue;
-      if (name.startsWith("prio: ")) {
-        if (addedPrio) continue;
-        addedPrio = true;
-      }
       addedSet.add(name);
       addLabels.push(name);
     }
@@ -578,6 +708,9 @@ export const ISSUE_FIELD_VALUES_QUERY = `
         number
         createdAt
         closedAt
+        issueType {
+          name
+        }
         labels(first: 50) {
           nodes {
             name
