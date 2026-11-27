@@ -400,5 +400,53 @@
     "checks": [
       "Format, lint, types, tests and build"
     ]
+  },
+  "HiraHR": {
+    "kind": "production",
+    "public": true,
+    "description": "HiraHR: kadry Monorise w przeglądarce, wzorem Personio i polskiego prawa pracy",
+    "homepage": "https://monorise.studio",
+    "topics": [
+      "monorise",
+      "hr",
+      "human-resources",
+      "leave-management",
+      "nextjs",
+      "prisma",
+      "postgresql"
+    ],
+    "areas": [
+      {
+        "name": "web",
+        "description": "Aplikacja w przeglądarce na hirahr.monorise.studio"
+      },
+      {
+        "name": "server",
+        "description": "API i serwer hira.monorise.studio"
+      },
+      {
+        "name": "employees",
+        "description": "Kartoteka, umowy, stanowiska i dane wrażliwe"
+      },
+      {
+        "name": "leave",
+        "description": "Urlopy, nieobecności i salda"
+      },
+      {
+        "name": "documents",
+        "description": "Akta osobowe i dokumenty pracownicze"
+      },
+      {
+        "name": "website",
+        "description": "Strona produktu na hira.monorise.studio"
+      },
+      {
+        "name": "design",
+        "description": "Wygląd, ekrany, UX"
+      }
+    ],
+    "checks": [
+      "Format, lint, types, tests and build"
+    ]
   }
 }
