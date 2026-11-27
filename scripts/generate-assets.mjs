@@ -79,19 +79,27 @@ write(
     <radialGradient id="a1" cx=".18" cy=".35" r=".55"><stop offset="0" stop-color="#6366f1" stop-opacity=".32"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></radialGradient>
     <radialGradient id="a2" cx=".82" cy=".28" r=".55"><stop offset="0" stop-color="#c026d3" stop-opacity=".24"/><stop offset="1" stop-color="#c026d3" stop-opacity="0"/></radialGradient>
     <radialGradient id="a3" cx=".5" cy="1" r=".5"><stop offset="0" stop-color="#f59e0b" stop-opacity=".2"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sheen" x1="-35%" y1="0%" x2="0%" y2="28%">
+      <stop offset="0%" stop-color="#818cf8" stop-opacity="0"/>
+      <stop offset="35%" stop-color="#c4b5fd" stop-opacity=".045"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity=".095"/>
+      <stop offset="65%" stop-color="#fde68a" stop-opacity=".045"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+      <animate attributeName="x1" values="-40%;110%;110%" keyTimes="0;0.38;1" dur="8s" repeatCount="indefinite"/>
+      <animate attributeName="x2" values="0%;150%;150%" keyTimes="0;0.38;1" dur="8s" repeatCount="indefinite"/>
+    </linearGradient>
     <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#4b5275" fill-opacity=".3"/></pattern>
     <clipPath id="card"><rect x="2" y="2" width="996" height="316" rx="20"/></clipPath>
   </defs>
   <style>
     ${fonts}
-    @keyframes breathe1{0%,100%{opacity:.6;transform:translate(0,0)}50%{opacity:1;transform:translate(24px,-8px)}}
-    @keyframes breathe2{0%,100%{opacity:1;transform:translate(0,0)}50%{opacity:.55;transform:translate(-26px,10px)}}
+    @keyframes breathe1{0%,100%{opacity:.55}50%{opacity:1}}
+    @keyframes breathe2{0%,100%{opacity:1}50%{opacity:.5}}
     @keyframes rise{0%,100%{transform:translateY(6px)}50%{transform:translateY(-6px)}}
     @keyframes glow{0%,100%{opacity:.55}50%{opacity:1}}
     @keyframes ping{0%{r:4px;opacity:.9}100%{r:13px;opacity:0}}
     @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
     @keyframes type{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
-    @keyframes shimmer{0%{transform:translateX(-300px)}100%{transform:translateX(1300px)}}
     .a1{animation:breathe1 9s ease-in-out infinite}
     .a2{animation:breathe2 11s ease-in-out infinite}
     .sun{animation:rise 5s ease-in-out infinite}
@@ -99,7 +107,6 @@ write(
     .ping{animation:ping 2s ease-out infinite}
     .cursor{animation:blink 1s step-end infinite}
     .line{opacity:0;animation:type .45s ease-out forwards}
-    .shine{animation:shimmer 7s ease-in-out infinite}
   </style>
 
   <g clip-path="url(#card)">
@@ -108,7 +115,7 @@ write(
     <rect width="1000" height="320" fill="url(#a1)" class="a1"/>
     <rect width="1000" height="320" fill="url(#a2)" class="a2"/>
     <rect width="1000" height="320" fill="url(#a3)"/>
-    <rect x="0" y="0" width="160" height="320" fill="#ffffff" fill-opacity=".025" transform="skewX(-20)" class="shine"/>
+    <rect width="1000" height="320" fill="url(#sheen)"/>
   </g>
   <rect x="2" y="2" width="996" height="316" rx="20" stroke="url(#border)" stroke-width="1.5"/>
 
