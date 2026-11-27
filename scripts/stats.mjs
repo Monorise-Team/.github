@@ -291,10 +291,10 @@ writeFileSync(
   <g transform="translate(8, 37)" clip-path="url(#g)">${cellSvg}<g class="snk-body">${snakeSvg}</g></g>
   <line x1="8" y1="155" x2="852" y2="155" stroke="#2a2e45" stroke-width="1" stroke-opacity="0.85"/>
   <g>
-    <text x="8" y="172" fill="#64748b" text-anchor="start" class="snk-mono" font-size="9.5">Mniej</text>
+    <text x="8" y="173" fill="#64748b" text-anchor="start" dominant-baseline="alphabetic" class="snk-mono" font-size="9.5">Mniej</text>
     ${legendRects}
-    <text x="110" y="172" fill="#64748b" text-anchor="start" class="snk-mono" font-size="9.5">Więcej</text>
-    <text x="852" y="172" fill="#64748b" text-anchor="end" class="snk-mono" font-size="9.5" font-weight="600" letter-spacing="0.06em">${velocityLabel}</text>
+    <text x="110" y="173" fill="#64748b" text-anchor="start" dominant-baseline="alphabetic" class="snk-mono" font-size="9.5">Więcej</text>
+    <text x="852" y="173" fill="#64748b" text-anchor="end" dominant-baseline="alphabetic" class="snk-mono" font-size="9.5" letter-spacing="0.06em">${velocityLabel}</text>
   </g>
 </svg>\n`,
 );
