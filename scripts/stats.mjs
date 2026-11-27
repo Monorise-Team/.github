@@ -264,37 +264,36 @@ const gridW = cols * S - (S - CELL);
 const gridH = 7 * S - (S - CELL);
 const lastYearTotal = gridCounts.reduce((s, c) => s + c, 0);
 const peakDay = gridCounts.reduce((m, c) => Math.max(m, c), 0);
-const avgPerDay = (lastYearTotal / gridCounts.length).toFixed(1).replace(".", ",");
 const legendRects = palette
   .map(
     (color, idx) =>
-      `<rect x="${42 + idx * 13}" y="164" width="9" height="9" rx="2" fill="${color}" stroke="#ffffff" stroke-opacity="0.06" stroke-width="0.6"/>`,
+      `<rect x="${48 + idx * 13}" y="164" width="9" height="9" rx="2" fill="${color}" stroke="#ffffff" stroke-opacity="0.06" stroke-width="0.6"/>`,
   )
   .join("");
-const velocityLabel = peakDay > 0 ? `SZCZYT ${peakDay}/DZIEŃ · ŚR. ${avgPerDay}/DZIEŃ` : `ŚR. ${avgPerDay}/DZIEŃ`;
+const peakLabel = `SZCZYT DZIEŃ ${peakDay}`;
 writeFileSync(
   join(out, "snake.svg"),
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 182" width="860" height="182" fill="none">
   <defs><clipPath id="g"><rect x="-4" y="-4" width="${gridW + 8}" height="${gridH + 8}" rx="4"/></clipPath></defs>
   <style>
-    .snk-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    .snk-label{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:0.06em;fill:#94a3b8}
     @keyframes snk-pulse{0%,100%{opacity:1}50%{opacity:.35}}
     .snk-dot{animation:snk-pulse 2.2s ease-in-out infinite}
     .snk-body{filter:drop-shadow(0 0 4px rgba(167,139,250,.55))}
   </style>
   <g>
     <circle cx="12" cy="14" r="3.5" fill="#34d399" class="snk-dot"/>
-    <text x="23" y="17.5" fill="#94a3b8" class="snk-mono" font-size="10.5" font-weight="600" letter-spacing="0.08em">AKTYWNOŚĆ · ${cols} TYGODNIE</text>
-    <text x="852" y="17.5" fill="#cbd5e1" text-anchor="end" class="snk-mono" font-size="10.5" font-weight="600" letter-spacing="0.04em">${fmt(lastYearTotal)} COMMITÓW · ${repos.length} REPO</text>
+    <text x="23" y="17.5" text-anchor="start" class="snk-label">AKTYWNOŚĆ · ${cols} TYGODNIE</text>
+    <text x="852" y="17.5" text-anchor="end" class="snk-label">${fmt(lastYearTotal)} COMMITÓW · ${repos.length} REPO</text>
   </g>
   <line x1="8" y1="27" x2="852" y2="27" stroke="#2a2e45" stroke-width="1" stroke-opacity="0.85"/>
   <g transform="translate(8, 37)" clip-path="url(#g)">${cellSvg}<g class="snk-body">${snakeSvg}</g></g>
   <line x1="8" y1="155" x2="852" y2="155" stroke="#2a2e45" stroke-width="1" stroke-opacity="0.85"/>
   <g>
-    <text x="8" y="173" fill="#64748b" text-anchor="start" dominant-baseline="alphabetic" class="snk-mono" font-size="9.5">Mniej</text>
+    <text x="8" y="173" text-anchor="start" dominant-baseline="alphabetic" class="snk-label">MNIEJ</text>
     ${legendRects}
-    <text x="110" y="173" fill="#64748b" text-anchor="start" dominant-baseline="alphabetic" class="snk-mono" font-size="9.5">Więcej</text>
-    <text x="852" y="173" fill="#64748b" text-anchor="end" dominant-baseline="alphabetic" class="snk-mono" font-size="9.5" letter-spacing="0.06em">${velocityLabel}</text>
+    <text x="116" y="173" text-anchor="start" dominant-baseline="alphabetic" class="snk-label">WIĘCEJ</text>
+    <text x="852" y="173" text-anchor="end" dominant-baseline="alphabetic" class="snk-label">${peakLabel}</text>
   </g>
 </svg>\n`,
 );
