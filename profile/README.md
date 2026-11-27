@@ -25,12 +25,11 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/streak.svg" alt="Seria commitów Monorise" />
 </p>
-</div>
 
-### ⚡ Codzienne tempo
-
-<div align="center">
+<p align="center">
   <img src="https://raw.githubusercontent.com/Monorise-Team/.github/refs/heads/stats/snake.svg" width="100%" alt="Wąż zjadający commity Monorise" />
+</p>
+
 </div>
 
 ### 🧭 Jak pracujemy
