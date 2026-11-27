@@ -164,7 +164,7 @@ const rows = [
   ["star", "Gwiazdki łącznie", fmt(stars)],
   ["commit", "Commity", fmt(commitsAll)],
   ["pr", "Pull requesty", fmt(totals.prs)],
-  ["issue", "Zgłoszenia (issues)", fmt(totals.issues)],
+  ["issue", "Issues", fmt(totals.issues)],
   ["repo", "Repozytoria", fmt(repos.length)],
 ];
 const ringPct = Math.max(0.05, Math.min(1, 1 - percentile / 100));
@@ -262,13 +262,41 @@ const snakeSvg = Array.from({ length: snakeLen }, (_, i) => {
 }).reverse().join("");
 const gridW = cols * S - (S - CELL);
 const gridH = 7 * S - (S - CELL);
-const W2 = gridW + 32;
-const H2 = gridH + 32;
+const lastYearTotal = gridCounts.reduce((s, c) => s + c, 0);
+const peakDay = gridCounts.reduce((m, c) => Math.max(m, c), 0);
+const avgPerDay = (lastYearTotal / gridCounts.length).toFixed(1).replace(".", ",");
+const legendRects = palette
+  .map(
+    (color, idx) =>
+      `<rect x="${42 + idx * 13}" y="164" width="9" height="9" rx="2" fill="${color}" stroke="#ffffff" stroke-opacity="0.06" stroke-width="0.6"/>`,
+  )
+  .join("");
+const velocityLabel = peakDay > 0 ? `SZCZYT ${peakDay}/DZIEŃ · ŚR. ${avgPerDay}/DZIEŃ` : `ŚR. ${avgPerDay}/DZIEŃ`;
 writeFileSync(
   join(out, "snake.svg"),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 ${W2} ${H2}" width="${W2}" height="${H2}" fill="none">
-  <defs><clipPath id="g"><rect x="-2" y="-2" width="${gridW + 4}" height="${gridH + 4}"/></clipPath></defs>
-  <g clip-path="url(#g)">${cellSvg}${snakeSvg}</g></svg>\n`,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 182" width="860" height="182" fill="none">
+  <defs><clipPath id="g"><rect x="-4" y="-4" width="${gridW + 8}" height="${gridH + 8}" rx="4"/></clipPath></defs>
+  <style>
+    .snk-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    @keyframes snk-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .snk-dot{animation:snk-pulse 2.2s ease-in-out infinite}
+    .snk-body{filter:drop-shadow(0 0 4px rgba(167,139,250,.55))}
+  </style>
+  <g>
+    <circle cx="12" cy="14" r="3.5" fill="#34d399" class="snk-dot"/>
+    <text x="23" y="17.5" fill="#94a3b8" class="snk-mono" font-size="10.5" font-weight="600" letter-spacing="0.08em">AKTYWNOŚĆ · ${cols} TYGODNIE</text>
+    <text x="852" y="17.5" fill="#cbd5e1" text-anchor="end" class="snk-mono" font-size="10.5" font-weight="600" letter-spacing="0.04em">${fmt(lastYearTotal)} COMMITÓW · ${repos.length} REPO</text>
+  </g>
+  <line x1="8" y1="27" x2="852" y2="27" stroke="#2a2e45" stroke-width="1" stroke-opacity="0.85"/>
+  <g transform="translate(8, 37)" clip-path="url(#g)">${cellSvg}<g class="snk-body">${snakeSvg}</g></g>
+  <line x1="8" y1="155" x2="852" y2="155" stroke="#2a2e45" stroke-width="1" stroke-opacity="0.85"/>
+  <g>
+    <text x="8" y="172" fill="#64748b" text-anchor="start" class="snk-mono" font-size="9.5">Mniej</text>
+    ${legendRects}
+    <text x="110" y="172" fill="#64748b" text-anchor="start" class="snk-mono" font-size="9.5">Więcej</text>
+    <text x="852" y="172" fill="#64748b" text-anchor="end" class="snk-mono" font-size="9.5" font-weight="600" letter-spacing="0.06em">${velocityLabel}</text>
+  </g>
+</svg>\n`,
 );
 
 console.log(`stats: ${commitsAll} commits since ${firstActive}, ${authors.size} authors, ${totals.prs} PRs, ${stars} stars, ${repos.length} repos (${privateRepos} private), ${topLangs.length} languages, rank ${grade}, streak ${current.len}/${longest.len}`);
