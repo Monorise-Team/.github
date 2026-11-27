@@ -165,7 +165,7 @@ const rows = [
   ["commit", "Commity", fmt(commitsAll)],
   ["pr", "Pull requesty", fmt(totals.prs)],
   ["issue", "Zgłoszenia (issues)", fmt(totals.issues)],
-  ["repo", "Repozytoria", privateRepos ? `${repos.length} (${privateRepos} prywatne)` : fmt(repos.length)],
+  ["repo", "Repozytoria", fmt(repos.length)],
 ];
 const ringPct = Math.max(0.05, Math.min(1, 1 - percentile / 100));
 const statsBody = `
@@ -214,46 +214,60 @@ const streakBody = `
   </g>`;
 writeFileSync(join(out, "streak.svg"), card(495, 195, streakBody));
 
-// snake.svg: the last 53 weeks; the snake winds through every column and eats the busy days
-const last = days.slice(-371);
-const offset = (new Date(last[0][0] + "T00:00:00Z").getUTCDay() + 7) % 7; // Sunday on top, as on GitHub
-const nonZero = last.map(([, c]) => c).filter((c) => c > 0).sort((a, b) => a - b);
+// snake.svg: full 53x7 grid aligned to Sun..Sat; the snake winds orthogonally and eats busy days on contact
+const cols = 53;
+const todayMs = Date.parse(today + "T00:00:00Z");
+const todayDow = new Date(todayMs).getUTCDay(); // 0 = Sun .. 6 = Sat
+const endMs = todayMs + (6 - todayDow) * 864e5; // Saturday of the current week
+const startMs = endMs - (cols * 7 - 1) * 864e5; // Sunday 52 weeks earlier
+const gridCounts = [];
+for (let i = 0; i < cols * 7; i++) {
+  const iso = new Date(startMs + i * 864e5).toISOString().slice(0, 10);
+  gridCounts.push(byDate.get(iso) ?? 0);
+}
+const nonZero = gridCounts.filter((c) => c > 0).sort((a, b) => a - b);
 const q = (p) => nonZero[Math.min(nonZero.length - 1, Math.floor(p * nonZero.length))] ?? 1;
 const steps = [q(0.25), q(0.5), q(0.75)];
 const palette = ["#161b22", "#3b3a8f", "#6d4fd1", "#c060c8", "#fbbf24"];
 const lvl = (c) => (c === 0 ? 0 : c <= steps[0] ? 1 : c <= steps[1] ? 2 : c <= steps[2] ? 3 : 4);
 const S = 16, CELL = 12;
-const cols = Math.ceil((last.length + offset) / 7);
-const grid = [];
-last.forEach(([, c], i) => { const k = i + offset; grid.push({ col: Math.floor(k / 7), row: k % 7, level: lvl(c) }); });
-// serpentine route: down the even columns, up the odd ones
+const grid = gridCounts.map((c, k) => ({ col: Math.floor(k / 7), row: k % 7, level: lvl(c) }));
+// strictly unit-step orthogonal serpentine route: even cols go down (0->6), odd cols (including -1 and 53) go up (6->0)
 const route = [];
-for (let col = -1; col <= cols; col++)
-  for (let r = 0; r < 7; r++) route.push({ col, row: col % 2 === 0 || col < 0 ? r : 6 - r });
-const TICK = 0.06; // seconds per cell
-const DUR = (route.length * TICK).toFixed(2);
+for (let col = -1; col <= cols; col++) {
+  const down = (col & 1) === 0;
+  for (let r = 0; r < 7; r++) route.push({ col, row: down ? r : 6 - r });
+}
+const TICK = 0.11; // seconds per cell
+const totalSteps = route.length - 1;
+const DUR = (totalSteps * TICK).toFixed(2);
 const at = new Map(route.map((p, i) => [`${p.col}:${p.row}`, i]));
 const pathD = route.map((p, i) => `${i ? "L" : "M"}${p.col * S + CELL / 2} ${p.row * S + CELL / 2}`).join(" ");
 const cellSvg = grid
   .map(({ col, row, level }) => {
     const x = col * S, y = row * S;
     if (level === 0) return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${palette[0]}"/>`;
-    const t = ((at.get(`${col}:${row}`) ?? 0) / route.length).toFixed(4);
-    const t2 = Math.min(0.9999, Number(t) + 0.0005).toFixed(4);
-    return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${palette[level]}"><animate attributeName="fill" dur="${DUR}s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;${t2};1" values="${palette[level]};${palette[0]};${palette[0]}"/></rect>`;
+    const t = ((at.get(`${col}:${row}`) ?? 0) / totalSteps).toFixed(5);
+    return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${palette[level]}"><animate attributeName="fill" dur="${DUR}s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;${t};1" values="${palette[level]};${palette[0]};${palette[0]}"/></rect>`;
   })
   .join("");
 const snakeLen = 5;
 const snakeSvg = Array.from({ length: snakeLen }, (_, i) => {
   const size = CELL - i * 1.4;
-  return `<rect x="${-size / 2}" y="${-size / 2}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="${(size / 3).toFixed(1)}" fill="#a78bfa" fill-opacity="${(1 - i * 0.15).toFixed(2)}">
-    <animateMotion dur="${DUR}s" repeatCount="indefinite" begin="-${((snakeLen - i) * TICK * 1.2).toFixed(2)}s" path="${pathD}"/></rect>`;
+  const delay = (i * TICK).toFixed(2);
+  const vis = i === 0 ? "" : ` visibility="hidden"`;
+  const reveal = i === 0 ? "" : `<set attributeName="visibility" to="visible" begin="${delay}s"/>`;
+  return `<rect x="${-size / 2}" y="${-size / 2}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="${(size / 3).toFixed(1)}" fill="#a78bfa" fill-opacity="${(1 - i * 0.15).toFixed(2)}"${vis}>
+    ${reveal}<animateMotion dur="${DUR}s" repeatCount="indefinite" begin="${delay}s" path="${pathD}"/></rect>`;
 }).reverse().join("");
-const W2 = cols * S + 32;
+const gridW = cols * S - (S - CELL);
+const gridH = 7 * S - (S - CELL);
+const W2 = gridW + 32;
+const H2 = gridH + 32;
 writeFileSync(
   join(out, "snake.svg"),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 ${W2} ${7 * S + 32}" width="${W2}" height="${7 * S + 32}" fill="none">
-  <defs><clipPath id="g"><rect x="-16" y="-16" width="${W2}" height="${7 * S + 32}"/></clipPath></defs>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 ${W2} ${H2}" width="${W2}" height="${H2}" fill="none">
+  <defs><clipPath id="g"><rect x="-2" y="-2" width="${gridW + 4}" height="${gridH + 4}"/></clipPath></defs>
   <g clip-path="url(#g)">${cellSvg}${snakeSvg}</g></svg>\n`,
 );
 
