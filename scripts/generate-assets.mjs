@@ -14,8 +14,8 @@ const fonts = `.sans{font-family:${SANS}}.mono{font-family:${MONO}}`;
 const chips = [
   ["WEB", "#22d3ee"],
   ["DESKTOP", "#a78bfa"],
-  ["API", "#f472b6"],
-  ["OLKUSZ, PL", "#fbbf24"],
+  ["MOBILE", "#f472b6"],
+  ["API", "#fbbf24"],
 ];
 let cx = 0;
 const chipSvg = chips
@@ -147,14 +147,14 @@ write(
   <g transform="translate(212,86)">
     <text x="0" y="16" fill="url(#sub)" class="mono" font-size="12.5" font-weight="700" letter-spacing=".22em">SOFTWARE HOUSE</text>
     <text x="-3" y="80" fill="url(#name)" class="sans" font-size="66" font-weight="900" letter-spacing="-0.035em">Monorise</text>
-    <text x="0" y="116" fill="#f1f5f9" class="sans" font-size="19" font-weight="600">Web i desktop, od pomysłu do wdrożenia.</text>
+    <text x="0" y="116" fill="#f1f5f9" class="sans" font-size="19" font-weight="600">Pełny software – od pomysłu do wdrożenia.</text>
     <text x="0" y="141" fill="#8b93b5" class="sans" font-size="14.5">Szybkie, prywatne i dopracowane w każdym pikselu.</text>
     <g transform="translate(0,160)">${chipSvg}</g>
   </g>
 
   <!-- terminal -->
-  <g transform="translate(726,70)">
-    <rect width="250" height="200" rx="14" fill="#0a0b16" fill-opacity=".88" stroke="#22264a"/>
+  <g transform="translate(726,64)">
+    <rect width="250" height="220" rx="14" fill="#0a0b16" fill-opacity=".88" stroke="#22264a"/>
     <path d="M0 36 H250" stroke="#1a1d36"/>
     <circle cx="18" cy="18" r="4" fill="#2e3350"/><circle cx="32" cy="18" r="4" fill="#2e3350"/><circle cx="46" cy="18" r="4" fill="#2e3350"/>
     <text x="232" y="22" fill="#4b5275" text-anchor="end" class="mono" font-size="10.5">~/monorise</text>
